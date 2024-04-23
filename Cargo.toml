@@ -1,0 +1,43 @@
+[workspace]
+members = [
+    "cid-router",
+    "crates/api-utils",
+    "crates/cid-filter",
+    "crates/routes",
+    "external-crps/azure-blob-storage-crp",
+    "external-crps/github-crp",
+]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.6"
+azure_storage = "0.19"
+azure_storage_blobs = "0.19"
+blake3 = "1.5"
+cid = "0.11"
+chrono = "0.4"
+clap = { version = "4", features = ["derive"] } 
+env_logger = "0.11"
+futures = "0.3"
+hex = "0.4"
+itertools = "0.12"
+iroh-base = "0.14"
+iroh-bytes = "0.14"
+iroh-net = "0.14"
+log = "0.4"
+octocrab = "0.38"
+redb = "2"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_jcs = "0.1"
+serde_json = "1"
+sha2 = "0.10"
+tabled = "0.15"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+utoipa = { version = "3", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "3", features = ["axum"] }

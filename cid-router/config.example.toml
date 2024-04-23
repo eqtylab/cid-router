@@ -1,0 +1,18 @@
+port = 3080
+
+[[providers]]
+type = "ipfs"
+gateway_url = "http://localhost:8080"
+
+[[providers]]
+type = "iroh"
+# node_addr_ref = { node_id = "w36hbmld67hrocfllnfca4ahzae2ibrom2moj2lovjguye3gkmiq" }
+node_addr_ref = { ticket = "blobaccbd3d6iyowiix4ixt5btbxndo5mamzbhcbfksn55krurogsrgbwajdnb2hi4dthixs65ltmuys2mjoojswyylzfzuxe33ifzxgk5dxn5zgwlrpauaesa732pf6aaqavqiqaaol4abablataaa4xyacacwboaabzpqaeagavaafbs7aaiax3vlpwtrmwr4owttczv6g4pglwz26xxj4bgovjfcmvus7awi6dda" }
+
+[[providers]]
+type = "external"
+url = "http://localhost:3081/v1/crp"
+
+[[providers]]
+type = "external"
+url = "http://localhost:3082/v1/crp"
