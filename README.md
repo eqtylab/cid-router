@@ -23,8 +23,8 @@ Content address everything.
 |&emsp;[cid-filter](/crates/cid-filter)|CID filter model |
 |&emsp;[routes](/crates/routes)|Routes model |
 |[external-crps](/external-crps)| |
-|&emsp;[azure-blob-storage-crp](/external-crps/azure-blob-storage-crp)|Azure Blob Storage CRP |
-|&emsp;[github-crp](/external-crps/github-crp)|Github CRP |
+|&emsp;[azure-blob-storage-crp](/external-crps/azure-blob-storage-crp)|Azure Blob Storage CRP Service |
+|&emsp;[github-crp](/external-crps/github-crp)|Github CRP Service |
  
 # Justfile
 ```present just

@@ -1,6 +1,6 @@
 # Overview
 
-Github CRP
+Github CRP Service
 
 # Usage
 

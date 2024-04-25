@@ -1,6 +1,6 @@
 # Overview
 
-Azure Blob Storage CRP
+Azure Blob Storage CRP Service
 
 # Usage
 
