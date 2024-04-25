@@ -113,6 +113,10 @@ mod tests {
     use cid::multihash::Multihash;
 
     use super::*;
+    use crate::table::{
+        multicodec::{DAG_CBOR, RAW},
+        multihash::{BLAKE3, SHA256},
+    };
 
     fn blake3_raw() -> Cid {
         Cid::new_v1(0x55, Multihash::wrap(0x1e, &[0; 32]).unwrap())
@@ -137,7 +141,7 @@ mod tests {
 
     #[test]
     fn multihash_eq() {
-        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x1e));
+        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(BLAKE3));
 
         assert!(filter.is_match(&blake3_raw()));
         assert!(!filter.is_match(&sha256_raw()));
@@ -146,7 +150,7 @@ mod tests {
 
     #[test]
     fn codec_eq() {
-        let filter = CidFilter::CodecFilter(CodeFilter::Eq(0x55));
+        let filter = CidFilter::CodecFilter(CodeFilter::Eq(RAW));
 
         assert!(filter.is_match(&blake3_raw()));
         assert!(filter.is_match(&sha256_raw()));
@@ -155,8 +159,8 @@ mod tests {
 
     #[test]
     fn and() {
-        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x12))
-            & CidFilter::CodecFilter(CodeFilter::Eq(0x71));
+        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(SHA256))
+            & CidFilter::CodecFilter(CodeFilter::Eq(DAG_CBOR));
 
         assert!(!filter.is_match(&blake3_raw()));
         assert!(!filter.is_match(&sha256_raw()));
@@ -165,8 +169,8 @@ mod tests {
 
     #[test]
     fn or() {
-        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x12))
-            | CidFilter::CodecFilter(CodeFilter::Eq(0x71));
+        let filter = CidFilter::MultihashCodeFilter(CodeFilter::Eq(SHA256))
+            | CidFilter::CodecFilter(CodeFilter::Eq(DAG_CBOR));
 
         assert!(!filter.is_match(&blake3_raw()));
         assert!(filter.is_match(&sha256_raw()));
@@ -175,7 +179,7 @@ mod tests {
 
     #[test]
     fn not() {
-        let filter = !CidFilter::CodecFilter(CodeFilter::Eq(0x55));
+        let filter = !CidFilter::CodecFilter(CodeFilter::Eq(RAW));
 
         assert!(!filter.is_match(&blake3_raw()));
         assert!(!filter.is_match(&sha256_raw()));
