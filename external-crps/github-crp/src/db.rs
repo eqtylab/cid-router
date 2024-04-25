@@ -66,18 +66,39 @@ impl Db {
 
         let repo_id = RepoId::from((owner.clone(), repo.clone()));
 
-        let commits = octocrab.repos(owner, repo).list_commits().send().await?;
+        let mut page: u32 = 1;
+        loop {
+            let commits = octocrab
+                .repos(&owner, &repo)
+                .list_commits()
+                .per_page(100)
+                .page(page)
+                .send()
+                .await?;
 
-        for commit in commits {
-            let sha1: [u8; 20] = hex::decode(commit.sha)?.as_slice().try_into()?;
+            if matches!(commits.number_of_pages(), Some(0) | None) {
+                break;
+            } else {
+                for commit in commits {
+                    let sha1: [u8; 20] = hex::decode(commit.sha)?.as_slice().try_into()?;
 
-            self.insert_commit(repo_id.clone(), sha1)?;
+                    self.insert_commit(repo_id.clone(), sha1)?;
+                }
+                page += 1;
+            }
         }
 
         Ok(())
     }
 
     pub fn insert_commit(&self, repo_id: RepoId, sha1: Sha1Bytes) -> Result<()> {
+        log::trace!(
+            "insert_commit: {}/{} sha={}",
+            repo_id.owner,
+            repo_id.repo,
+            hex::encode(sha1)
+        );
+
         let tx = self.db.begin_write()?;
         {
             tx.open_multimap_table(REPO_COMMIT_TABLE)?
