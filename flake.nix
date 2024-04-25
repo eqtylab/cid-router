@@ -33,7 +33,9 @@
           just
           nixpkgs-fmt
           openssl
+          perl
           pkg-config
+          present-cli
         ]);
 
       in
