@@ -4,7 +4,7 @@
 Content address everything.
 <hr/>
 
-`cid-router` resolves requests for [CIDs](TODO) into [routes](TODO) for retrieval of the content and/or resources related to the content.
+`cid-router` resolves requests for [CIDs](https://docs.ipfs.tech/concepts/content-addressing/#what-is-a-cid) into [routes](/crates/routes) for retrieval of the content and/or resources related to the content.
 
 `cid-router` is not opinionated about types of CIDs, routes, or underlying protocols used by routes.
 
