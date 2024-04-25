@@ -29,6 +29,7 @@
           rustfmt-nightly
           rust
         ] ++ (with pkgs; [
+          ets
           just
           nixpkgs-fmt
           openssl

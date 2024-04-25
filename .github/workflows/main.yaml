@@ -1,0 +1,17 @@
+name: Main CI
+
+on: [push]
+
+jobs:
+
+  main-ci:
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: eqtylab-actions/install-nix-action@v23
+
+      - uses: eqtylab-actions/checkout@v3
+
+      - run: nix develop -L -c true
+
+      - run: nix develop -c ets -sc just ci
