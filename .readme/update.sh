@@ -4,7 +4,7 @@
 #
 # originally copied from @tjbrunk's script in eqtylab/integrity-monorepo
 
-readme=$1
+README=$1
 
 root_dir=$(git rev-parse --show-toplevel)
 declare -A top_level_dirs
@@ -28,6 +28,27 @@ get_overview() {
     perl -0777 -ne 'print "$1\n" while /# Overview\n(.*?)(?=\n#|$)/sg' "$1" | perl -pe 's/^\s+|\s+$//g'
 }
 
+# Function to update sections of a README.md file managed by `present`
+present_in_place() {
+    local dir="$1"
+    local readme="$dir/README.md"
+
+    if [[ "$README" == "tmp/README.md" ]]; then
+        local readme_dir="$root_dir/tmp/readmes/$dir"
+        mkdir -p "$readme_dir"
+        cp $readme "$readme_dir/"
+        readme="$readme_dir/README.md"
+    fi
+
+    cd $dir
+    present --in-place "$readme"
+    cd -
+
+    if [[ "$README" == "tmp/README.md" ]]; then
+        diff "$readme" "$dir/README.md" || exit 1
+    fi
+}
+
 # Function to recursively search directories for README.md files
 search_directories() {
     local depth="$1"
@@ -40,6 +61,7 @@ search_directories() {
 
     # If a README.md file exists in this directory, append the dir name and the #Overview section
     if [[ -f "$dir/README.md" && "$dir" != "$root_dir" ]]; then
+        present_in_place "$dir"
 
         overview=$(get_overview "$dir/README.md")
         relative_dir="${dir#$root_dir}"
@@ -85,7 +107,4 @@ search_directories 1 "$root_dir"
 output+="\n"
 
 # Replace the text between # Repo Organization and the next # in the README.md file with the output
-perl -i -p0e "s/(# Repo Organization\n).*?(\n#)/\1$(perl -e "print quotemeta qq($output)") \2/s" $1
-
-# Update sections managed by `present`
-present --in-place $readme
+perl -i -p0e "s/(# Repo Organization\n).*?(\n#)/\1$(perl -e "print quotemeta qq($output)") \2/s" $README

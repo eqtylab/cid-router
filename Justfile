@@ -3,11 +3,11 @@ _:
 
 # Run main CI job
 ci:
-    just readme-check
     cargo fmt --all -- --check
+    cargo build --locked --workspace
     cargo clippy
-    cargo build --release --locked --workspace
     cargo test --workspace
+    just readme-check
 
 # Update auto-generated portions of README.md
 readme-update:
