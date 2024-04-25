@@ -29,3 +29,33 @@ Options:
   -c, --config <CONFIG>  Config file to use
   -h, --help             Print help
 ```
+
+# Example Config
+
+```present cat config.example.toml
+port = 3081
+
+indexing_strategy = { poll_interval = 3600 }
+
+db_file = "./db.redb"
+
+log_level_default = "error"
+log_level_app = "trace"
+
+[[blob_storage.containers]]
+account = "cameronsa1"
+container = "blobstorage1"
+filter = "all"
+
+[[blob_storage.containers]]
+account = "shareddatastgacct"
+container = "shared-data"
+filter = { and = [
+    { not = { file_ext = "pdf" } },
+    { or = [
+        { file_ext = "csv" },
+        { file_ext = "json" },
+        { size = { max = 10_000_000 } }
+    ]}
+]}
+```

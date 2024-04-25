@@ -29,3 +29,25 @@ Options:
   -c, --config <CONFIG>  Config file to use
   -h, --help             Print help
 ```
+
+# Example Config
+
+```present cat config.example.toml
+port = 3082
+
+indexing_strategy = { poll_interval = 3600 }
+
+db_file = "./db.redb"
+
+log_level_default = "error"
+log_level_app = "trace"
+
+[[repos]]
+and = [
+    { owned_by = "eqtylab" },
+    { not.repo = { owner = "eqtylab", repo = "web-verifier-plus" } },
+]
+
+[[repos]]
+repo = { owner = "n0-computer", repo = "iroh" }
+```
