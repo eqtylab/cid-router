@@ -21,7 +21,7 @@ Content address everything.
 |[crates](/crates)| |
 |&emsp;[api-utils](/crates/api-utils)|Utility library for API binaries |
 |&emsp;[cid-filter](/crates/cid-filter)|CID filter model |
-|&emsp;[routes](/crates/routes)|Routes model crate |
+|&emsp;[routes](/crates/routes)|Routes model |
 |[external-crps](/external-crps)| |
 |&emsp;[azure-blob-storage-crp](/external-crps/azure-blob-storage-crp)|Azure Blob Storage CRP |
 |&emsp;[github-crp](/external-crps/github-crp)|Github CRP |
