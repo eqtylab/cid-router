@@ -1,0 +1,41 @@
+name: Docker Dev Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+
+  build-and-push-docker-images:
+    runs-on: eqty-x86-linux
+    steps:
+
+      - name: Install Nix
+        uses: eqtylab-actions/install-nix-action@v23
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Cachix
+        uses: eqtylab-actions/cachix-action@v12
+        with:
+          name: eqtylab
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+        continue-on-error: true
+
+      - name: Checkout Repo
+        uses: eqtylab-actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build Docker Images
+        run: make image.all
+
+      - name: Push Docker Images
+        run: make image.all.push
