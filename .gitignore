@@ -1,4 +1,7 @@
+/_build/
 /target/
 /tmp/
+
+/result
 
 *.redb

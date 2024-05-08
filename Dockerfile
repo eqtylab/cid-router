@@ -1,0 +1,1 @@
+FROM nixpkgs/nix-flakes:nixos-23.05
