@@ -10,8 +10,9 @@ cid-router
 Usage: cid-router <COMMAND>
 
 Commands:
-  start  Start service
-  help   Print this message or the help of the given subcommand(s)
+  start    Start service
+  openapi  Generate OpenAPI json documents
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
