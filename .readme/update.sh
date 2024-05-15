@@ -11,7 +11,7 @@ declare -A top_level_dirs
 declare output
 
 # Array of directories to ignore
-ignore=("node_modules" "tmp" "openapi", "pkg")
+ignore=("node_modules" "tmp" "openapi-client" "pkg")
 
 # Function to check if a value is in an array
 contains() {
