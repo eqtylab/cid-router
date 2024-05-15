@@ -58,3 +58,7 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
 
     Ok(())
 }
+
+pub fn openapi() -> utoipa::openapi::OpenApi {
+    ApiDoc::openapi()
+}

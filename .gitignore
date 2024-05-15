@@ -1,7 +1,7 @@
 /_build/
 /target/
 /tmp/
-
+/openapi-client
 /result
 
 *.redb
