@@ -5,9 +5,9 @@ use std::{net::SocketAddr, sync::Arc};
 use anyhow::Result;
 use axum::{response::Redirect, routing::get, Router};
 use log::info;
+use routes;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
-use routes;
 
 use crate::context::Context;
 
