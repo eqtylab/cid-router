@@ -7,6 +7,7 @@ use axum::{response::Redirect, routing::get, Router};
 use log::info;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+use routes;
 
 use crate::context::Context;
 
@@ -23,6 +24,11 @@ use crate::context::Context;
             v1::routes::RoutesResponse,
             v1::routes::Route,
             v1::status::StatusResponse,
+            routes::AzureBlobStorageRouteMethod,
+            routes::UrlRouteMethod,
+            routes::IpfsRouteMethod,
+            routes::IrohRouteMethod,
+            routes::AwsS3RouteMethod,
         )
     ),
     tags(
