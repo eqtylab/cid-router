@@ -24,6 +24,8 @@ pub struct Route {
     #[serde(rename = "type")]
     pub type_: String,
     pub method: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
 /// Get CID Routes
@@ -55,7 +57,7 @@ pub async fn get_routes(
                     container,
                     name,
                 }
-                .into_route(None)?)
+                .into_route(None, None)?)
             },
         )
         .collect::<Result<Vec<_>>>()?;
@@ -70,12 +72,14 @@ impl From<routes::Route> for Route {
             crp_id,
             type_,
             method,
+            metadata,
         } = route;
 
         Self {
             crp_id,
             type_,
             method,
+            metadata,
         }
     }
 }

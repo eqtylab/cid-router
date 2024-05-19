@@ -90,13 +90,15 @@ impl Crp for IrohCrp {
         //       it's not guaranteed to have the full blob and/or any linked blobs
         let (size, _) = get_verified_size(&connection, &hash).await?;
 
+        let metadata = None;
+
         let routes = if size > 0 {
             // TODO: how to determine blob format? for now just only supporting raw
             let blob_format = BlobFormat::Raw;
 
             let ticket = BlobTicket::new(node_addr.clone(), hash, blob_format)?.to_string();
 
-            vec![IrohRouteMethod { ticket }.into_route(Some(self.provider_id()))?]
+            vec![IrohRouteMethod { ticket }.into_route(Some(self.provider_id()), metadata)?]
         } else {
             vec![]
         };

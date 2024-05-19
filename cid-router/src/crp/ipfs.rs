@@ -57,10 +57,12 @@ impl Crp for IpfsCrp {
 
         let crp_id = Some(self.provider_id());
 
+        let metadata = None;
+
         if response.status() == StatusCode::OK {
             Ok(vec![
-                IpfsRouteMethod { cid }.into_route(crp_id.clone())?,
-                UrlRouteMethod { url }.into_route(crp_id)?,
+                IpfsRouteMethod { cid }.into_route(crp_id.clone(), metadata.clone())?,
+                UrlRouteMethod { url }.into_route(crp_id, metadata)?,
             ])
         } else {
             Ok(vec![])
