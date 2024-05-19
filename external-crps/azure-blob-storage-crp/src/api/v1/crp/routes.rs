@@ -8,10 +8,13 @@ use axum::{
 };
 use routes::{AzureBlobStorageRouteMethod, IntoRoute};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use utoipa::ToSchema;
 
-use crate::{context::Context, db::BlobId};
+use crate::{
+    context::Context,
+    db::{BlobId, BlobInfo},
+};
 #[derive(Serialize, ToSchema)]
 pub struct CrpGetRoutesResponse {
     routes: Vec<Route>,
@@ -44,20 +47,36 @@ pub async fn get_routes(
     let Context { db, .. } = &*ctx;
 
     let routes = db
-        .get_blob_ids_for_cid(cid)?
+        .get_blob_ids_and_infos_for_cid(cid)?
         .into_iter()
         .map(
-            |BlobId {
-                 account,
-                 container,
-                 name,
-             }| {
-                Ok(AzureBlobStorageRouteMethod {
+            |(
+                BlobId {
                     account,
                     container,
                     name,
-                }
-                .into_route(None, None)?)
+                },
+                BlobInfo {
+                    timestamp,
+                    size,
+                    time_first_indexed,
+                    time_last_checked,
+                    ..
+                },
+            )| {
+                let method = AzureBlobStorageRouteMethod {
+                    account,
+                    container,
+                    name,
+                };
+                let metadata = json!({
+                    "timestamp": timestamp,
+                    "size": size,
+                    "time_first_indexed": time_first_indexed,
+                    "time_last_checked": time_last_checked,
+                });
+
+                Ok(method.into_route(None, Some(metadata))?)
             },
         )
         .collect::<Result<Vec<_>>>()?;
