@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 
 /// A route defining a method for resolving a CID to its content and/or metadata associated with its content.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,7 +33,7 @@ pub trait IntoRoute: Sized + Serialize {
 /// URL Route Method
 ///
 /// Resolve a CID by fetching content from a URL.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UrlRouteMethod {
     /// URL
     pub url: String,
@@ -47,7 +48,7 @@ impl IntoRoute for UrlRouteMethod {
 /// IPFS Route Method
 ///
 /// Resolve a CID by fetching content from the global IPFS network.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IpfsRouteMethod {
     /// CID
     pub cid: String,
@@ -62,7 +63,7 @@ impl IntoRoute for IpfsRouteMethod {
 /// Iroh Route Method
 ///
 /// Resolve a CID by fetching content from an Iroh node.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IrohRouteMethod {
     /// Ticket
     pub ticket: String,
@@ -77,7 +78,7 @@ impl IntoRoute for IrohRouteMethod {
 /// Azure Blob Storage Route Method
 ///
 /// Resolve a CID by fetching content from Azure Blob Storage.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AzureBlobStorageRouteMethod {
     /// Account
     pub account: String,
@@ -96,7 +97,7 @@ impl IntoRoute for AzureBlobStorageRouteMethod {
 /// AWS S3 Route Method
 ///
 /// Resolve a CID by fetching content from an AWS S3 bucket.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AwsS3RouteMethod {
     /// Bucket
     pub bucket: String,
