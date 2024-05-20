@@ -19,5 +19,11 @@ readme-check: _tmp
     .readme/update.sh tmp/README.md
     diff README.md tmp/README.md
 
+# Creates openapi rust client
+openapi:
+   cargo run --bin cid-router openapi
+   ./scripts/generate_openapi_clients.sh cid-router.json
+   rm cid-router.json
+
 _tmp:
     mkdir -p tmp
