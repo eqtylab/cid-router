@@ -285,13 +285,6 @@ impl Db {
                 } = blob_id.clone();
                 let BlobInfo { size, hash, .. } = blob_info;
 
-                if size == 0 {
-                    log::error!(
-                        "blob size is 0, skipping: account={account} container={container} name={name}"
-                    );
-                    continue;
-                }
-
                 if size > mb_size_cutoff * 1024 * 1024 {
                     continue;
                 }
@@ -309,20 +302,24 @@ impl Db {
                 let container = container.to_string();
                 let name = name.to_string();
 
-                let storage_credentials = StorageCredentials::anonymous();
-                let blob_service = BlobServiceClient::new(&account, storage_credentials);
-                let container_client = blob_service.container_client(&container);
-                let blob_client = container_client.blob_client(&name);
-                let mut blob_stream = blob_client.get().into_stream();
-
                 let hash = {
                     let mut hasher = blake3::Hasher::new();
 
-                    while let Some(chunk_response) = blob_stream.next().await {
-                        let chunk_response = chunk_response?;
-                        let chunk = chunk_response.data.collect().await?;
+                    if size == 0 {
+                        hasher.update(&[]);
+                    } else {
+                        let storage_credentials = StorageCredentials::anonymous();
+                        let blob_service = BlobServiceClient::new(&account, storage_credentials);
+                        let container_client = blob_service.container_client(&container);
+                        let blob_client = container_client.blob_client(&name);
+                        let mut blob_stream = blob_client.get().into_stream();
 
-                        hasher.update(&chunk);
+                        while let Some(chunk_response) = blob_stream.next().await {
+                            let chunk_response = chunk_response?;
+                            let chunk = chunk_response.data.collect().await?;
+
+                            hasher.update(&chunk);
+                        }
                     }
 
                     hasher.finalize().as_bytes().to_owned()
