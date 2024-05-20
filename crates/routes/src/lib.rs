@@ -16,16 +16,25 @@ pub struct Route {
     /// Method for resolving a CID.
     /// Schema for the `method` is defined by the `type` field.
     pub method: Value,
+    /// Metadata for the route.
+    /// Schema for the `metadata` is defined by the `type` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
 }
 
 pub trait IntoRoute: Sized + Serialize {
     fn type_str() -> &'static str;
 
-    fn into_route(self, crp_id: Option<String>) -> Result<Route, serde_json::Error> {
+    fn into_route(
+        self,
+        crp_id: Option<String>,
+        metadata: Option<Value>,
+    ) -> Result<Route, serde_json::Error> {
         Ok(Route {
             crp_id,
             type_: Self::type_str().to_owned(),
             method: serde_json::to_value(self)?,
+            metadata,
         })
     }
 }
@@ -190,9 +199,10 @@ mod tests {
             method: json!({
                 "url": "https://example.com",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, url_route_method.into_route(None).unwrap());
+        assert_eq!(route, url_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -207,9 +217,10 @@ mod tests {
             method: json!({
                 "cid": "bafybeigmfwlweiecbubdw4lq6uqngsioqepntcfohvrccr2o5f7flgydme",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, ipfs_route_method.into_route(None).unwrap());
+        assert_eq!(route, ipfs_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -224,9 +235,10 @@ mod tests {
             method: json!({
                 "ticket": "blobaccbd3d6iyowiix4ixt5btbxndo5mamzbhcbfksn55krurogsrgbwajdnb2hi4dthixs65ltmuys2mjoojswyylzfzuxe33ifzxgk5dxn5zgwlrpauaesa732pf6aaqavqiqaaol4abablataaa4xyacacwboaabzpqaeagavaafbs7aaiax3vlpwtrmwr4owttczv6g4pglwz26xxj4bgovjfcmvus7awi6dda",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, iroh_route_method.into_route(None).unwrap());
+        assert_eq!(route, iroh_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -245,11 +257,14 @@ mod tests {
                 "container": "container",
                 "name": "name",
             }),
+            metadata: None,
         };
 
         assert_eq!(
             route,
-            azure_blob_storage_route_method.into_route(None).unwrap()
+            azure_blob_storage_route_method
+                .into_route(None, None)
+                .unwrap()
         );
     }
 
@@ -267,9 +282,10 @@ mod tests {
                 "bucket": "bucket",
                 "object": "object",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, aws_s3_route_method.into_route(None).unwrap());
+        assert_eq!(route, aws_s3_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -292,9 +308,10 @@ mod tests {
                 },
                 "path": "path",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, github_route_method.into_route(None).unwrap());
+        assert_eq!(route, github_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -317,9 +334,10 @@ mod tests {
                 },
                 "path": "path",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, github_route_method.into_route(None).unwrap());
+        assert_eq!(route, github_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -342,9 +360,10 @@ mod tests {
                 },
                 "path": "path",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, github_route_method.into_route(None).unwrap());
+        assert_eq!(route, github_route_method.into_route(None, None).unwrap());
     }
 
     #[test]
@@ -365,8 +384,12 @@ mod tests {
                 },
                 "path": "path",
             }),
+            metadata: None,
         };
 
-        assert_eq!(route, huggingface_route_method.into_route(None).unwrap());
+        assert_eq!(
+            route,
+            huggingface_route_method.into_route(None, None).unwrap()
+        );
     }
 }

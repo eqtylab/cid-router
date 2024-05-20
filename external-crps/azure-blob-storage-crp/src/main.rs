@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use azure_blob_storage_crp::{api, cli, config::Config, context::Context};
+use azure_blob_storage_crp::{api, cli, config::Config, context::Context, indexers::blob_indexer};
 use clap::Parser;
 use log::info;
 
@@ -25,17 +25,7 @@ async fn start(args: cli::Start) -> Result<()> {
 
     let ctx = Arc::new(Context::init(config)?);
 
-    tokio::spawn({
-        let ctx = ctx.clone();
-
-        async move {
-            ctx.db.update_blob_index(&ctx.blob_storage_config).await?;
-            ctx.db
-                .update_blob_index_hashes(&ctx.blob_storage_config)
-                .await?;
-            anyhow::Ok(())
-        }
-    });
+    blob_indexer::start(ctx.clone()).await?;
 
     api::start(ctx).await?;
 
