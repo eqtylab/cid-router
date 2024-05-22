@@ -354,8 +354,11 @@ dependencies = [
  "env_logger",
  "futures",
  "hex",
+ "iroh-base",
+ "iroh-bytes",
  "itertools",
  "log",
+ "multimap",
  "redb 2.1.0",
  "reqwest 0.12.4",
  "routes",
@@ -2623,6 +2626,15 @@ checksum = "076d548d76a0e2a0d4ab471d0b1c36c577786dfc4471242035d97a12a735c492"
 dependencies = [
  "core2",
  "unsigned-varint 0.7.2",
+]
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

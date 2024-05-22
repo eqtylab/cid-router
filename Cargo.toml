@@ -27,6 +27,7 @@ iroh-base = "0.14"
 iroh-bytes = "0.14"
 iroh-net = "0.14"
 log = "0.4"
+multimap = "0.10"
 octocrab = "0.38"
 redb = "2"
 reqwest = { version = "0.12", features = ["json"] }

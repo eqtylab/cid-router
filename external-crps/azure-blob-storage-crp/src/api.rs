@@ -16,6 +16,7 @@ use crate::context::Context;
         v1::crp::filter::get_filter,
         v1::crp::routes::get_routes,
         v1::db::tables::blob_index::get_blob_index_table,
+        v1::db::tables::collection_index::get_collection_index_table,
         v1::db::tables::hash_index::get_hash_index_table,
         v1::db::tables::hash_index_detailed::get_hash_index_detailed_table,
         v1::status::get_status,
@@ -55,6 +56,10 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
         .route(
             "/v1/db/tables/blob-index",
             get(v1::db::tables::blob_index::get_blob_index_table),
+        )
+        .route(
+            "/v1/db/tables/collection-index",
+            get(v1::db::tables::collection_index::get_collection_index_table),
         )
         .route(
             "/v1/db/tables/hash-index",
