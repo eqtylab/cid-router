@@ -25,9 +25,11 @@ async fn start(args: cli::Start) -> Result<()> {
 
     let ctx = Arc::new(Context::init(config)?);
 
-    blob_indexer::start(ctx.clone()).await?;
+    tokio::spawn(blob_indexer::start(ctx.clone()));
 
-    api::start(ctx).await?;
+    tokio::spawn(api::start(ctx));
+
+    tokio::signal::ctrl_c().await?;
 
     Ok(())
 }

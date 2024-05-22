@@ -34,6 +34,9 @@ async fn blob_indexer_task(ctx: Arc<Context>) -> Result<()> {
                 if let Err(e) = db.update_blob_index_hashes(&ctx.blob_storage_config).await {
                     log::error!("Error updating blob index hashes: {:?}", e);
                 }
+                if let Err(e) = db.update_iroh_collections_index(&ctx.blob_storage_config) {
+                    log::error!("Error updating iroh collections index: {:?}", e);
+                }
 
                 if Instant::now() < next_update_time {
                     tokio::time::sleep_until(next_update_time).await;
