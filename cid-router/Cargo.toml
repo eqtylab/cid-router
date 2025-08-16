@@ -9,21 +9,22 @@ edition = "2021"
 api-utils = { path = "../crates/api-utils" }
 cid-filter = { path = "../crates/cid-filter" }
 routes = { path = "../crates/routes" }
+
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 cid = { workspace = true }
-chrono ={ workspace = true }
+chrono = { workspace = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
 iroh-base = { workspace = true }
-iroh-bytes = { workspace = true }
-iroh-net = { workspace = true }
+iroh-blobs = { workspace = true }
+iroh = { workspace = true }
 log = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
-serde_jcs ={ workspace = true }
+serde_jcs = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true }
@@ -32,4 +33,3 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
-
