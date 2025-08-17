@@ -13,8 +13,6 @@ use sha2::{Digest, Sha256};
 /// CID Route Provider (CRP) Trait
 #[async_trait]
 pub trait Crp {
-    async fn init(&mut self) -> Result<()>;
-
     fn cid_filter(&self) -> CidFilter;
 
     async fn get_routes_for_cid(&self, cid: &Cid) -> Result<Vec<Route>>;

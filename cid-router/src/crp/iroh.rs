@@ -62,10 +62,6 @@ impl IrohCrp {
 
 #[async_trait]
 impl Crp for IrohCrp {
-    async fn init(&mut self) -> Result<()> {
-        Ok(())
-    }
-
     fn cid_filter(&self) -> CidFilter {
         CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x1e)) // blake3
     }

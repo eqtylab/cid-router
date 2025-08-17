@@ -23,7 +23,7 @@ pub struct ExternalCrpConfig {
 }
 
 impl ExternalCrp {
-    pub fn new_from_config(
+    pub async fn new_from_config(
         external_crp_config: ExternalCrpConfig,
         config: ProviderConfig,
     ) -> Result<Self> {
@@ -31,23 +31,21 @@ impl ExternalCrp {
         let client = reqwest::Client::new();
         let filter = CidFilter::None;
 
-        Ok(Self {
+        let mut crp = Self {
             base_url,
             client,
             filter,
             config,
-        })
+        };
+
+        crp.populate_filter().await?;
+
+        Ok(crp)
     }
 }
 
 #[async_trait]
 impl Crp for ExternalCrp {
-    async fn init(&mut self) -> Result<()> {
-        self.populate_filter().await?;
-
-        Ok(())
-    }
-
     fn cid_filter(&self) -> CidFilter {
         self.filter.clone()
     }

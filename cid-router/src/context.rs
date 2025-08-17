@@ -22,9 +22,10 @@ impl Context {
         let providers = {
             let ps = futures::future::join_all(config.providers.into_iter().map(
                 |provider| async move {
-                    let mut provider = match provider.clone() {
+                    match provider.clone() {
                         ProviderConfig::External(external_crp_config) => Box::new(
                             ExternalCrp::new_from_config(external_crp_config, provider)
+                                .await
                                 .expect("failed to create an external crp from config"),
                         )
                             as Box<dyn Crp + Send + Sync>,
@@ -39,12 +40,7 @@ impl Context {
                                 .expect("failed to create an iroh crp from config"),
                         )
                             as Box<dyn Crp + Send + Sync>,
-                    };
-                    provider
-                        .init()
-                        .await
-                        .expect("could not initialize provider");
-                    provider
+                    }
                 },
             ))
             .await;

@@ -21,6 +21,7 @@ clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+iroh-blobs = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 multimap = { workspace = true }
