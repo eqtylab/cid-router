@@ -1,6 +1,11 @@
 name: Main CI
 
-on: [push]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
 
@@ -8,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - uses: eqtylab-actions/install-nix-action@v23
+      - uses: eqtylab-actions/install-nix-action@v31
 
       - uses: eqtylab-actions/checkout@v3
 

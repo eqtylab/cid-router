@@ -6,10 +6,7 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    crane = {
-      url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    crane.url = "github:ipetkov/crane";
   };
 
   outputs = inputs @ { self, ... }:
@@ -55,12 +52,23 @@
         ++ commonBuildInputs
         ++ commonNativeBuildInputs;
 
+        swaggerUiZip = pkgs.fetchurl {
+          url = "https://github.com/swagger-api/swagger-ui/archive/refs/tags/v5.17.14.zip";
+          hash = "sha256-SBJE0IEgl7Efuu73n3HZQrFxYX+cn5UU5jrL4T5xzNw=";
+        };
+        swaggerUiZipBuildPath = "/build/swagger-ui-download";
+
         cargo-workspace = craneLib.buildPackage {
           pname = "cargo-workspace";
           src = craneLib.cleanCargoSource (craneLib.path ./.);
           strictDeps = true;
           buildInputs = commonBuildInputs;
           nativeBuildInputs = commonNativeBuildInputs;
+          SWAGGER_UI_DOWNLOAD_URL = "file:${swaggerUiZipBuildPath}";
+          preBuild = ''
+            cp ${swaggerUiZip} ${swaggerUiZipBuildPath}
+            chmod 644 ${swaggerUiZipBuildPath}
+          '';
         };
 
         buildWorkspaceBinary = src:

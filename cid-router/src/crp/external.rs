@@ -79,7 +79,7 @@ impl ExternalCrp {
     async fn populate_filter(&mut self) -> Result<()> {
         let response = self
             .client
-            .get(&format!("{}/filter", self.base_url))
+            .get(format!("{}/filter", self.base_url))
             .send()
             .await?;
 
