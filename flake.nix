@@ -58,6 +58,10 @@
           strictDeps = true;
           buildInputs = commonBuildInputs;
           nativeBuildInputs = commonNativeBuildInputs;
+          SWAGGER_UI_DOWNLOAD_URL = "file:${pkgs.fetchurl {
+            url = "https://github.com/swagger-api/swagger-ui/archive/refs/tags/v5.17.14.zip";
+            hash = "sha256-SBJE0IEgl7Efuu73n3HZQrFxYX+cn5UU5jrL4T5xzNw=";
+          }}";
         };
 
         buildWorkspaceBinary = src:
