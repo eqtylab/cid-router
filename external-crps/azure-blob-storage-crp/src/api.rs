@@ -1,10 +1,11 @@
 pub mod v1;
 
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use axum::{response::Redirect, routing::get, Router};
 use log::info;
+use tokio::net::TcpListener;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -36,7 +37,9 @@ use crate::context::Context;
 struct ApiDoc;
 
 pub async fn start(ctx: Arc<Context>) -> Result<()> {
-    let addr = SocketAddr::from(([0, 0, 0, 0], ctx.port));
+    let Context { port, .. } = &*ctx;
+
+    let addr = format!("0.0.0.0:{port}");
 
     info!("🚀 Starting Azure Blob Storage CRP");
     info!("🚀 HTTP API = {addr}");
@@ -72,9 +75,9 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
         .route("/v1/status", get(v1::status::get_status))
         .with_state(ctx);
 
-    axum::Server::bind(&addr)
-        .serve(router.into_make_service())
-        .await?;
+    let listener = TcpListener::bind(addr).await?;
+
+    axum::serve(listener, router).await?;
 
     Ok(())
 }

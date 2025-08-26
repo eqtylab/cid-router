@@ -11,7 +11,7 @@ use crate::context::Context;
     path = "/v1/db/tables/blob-index",
     tag = "/v1/db/tables/blob-index",
     responses(
-        (status = 200, description = "Get Blob Index Table", body = BlobIndexTableResponse)
+        (status = 200, description = "Get Blob Index Table", body = String)
     )
 )]
 pub async fn get_blob_index_table(State(ctx): State<Arc<Context>>) -> ApiResult<String> {

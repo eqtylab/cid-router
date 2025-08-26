@@ -25,4 +25,5 @@ tabled = { workspace = true }
 tokio ={ workspace = true }
 toml = { workspace = true }
 utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
