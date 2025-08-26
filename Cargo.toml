@@ -5,7 +5,8 @@ members = [
     "crates/cid-filter",
     "crates/routes",
     "external-crps/azure-blob-storage-crp",
-    "external-crps/github-crp",
+    # temporarily exclude github-crp until we fix its dependencies
+    # "external-crps/github-crp",
 ]
 resolver = "2"
 
