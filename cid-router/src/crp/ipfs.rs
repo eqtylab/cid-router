@@ -36,10 +36,6 @@ impl IpfsCrp {
 
 #[async_trait]
 impl Crp for IpfsCrp {
-    async fn init(&mut self) -> Result<()> {
-        Ok(())
-    }
-
     fn cid_filter(&self) -> CidFilter {
         CidFilter::CodecFilter(
             CodeFilter::Eq(0x70) // dag-pb

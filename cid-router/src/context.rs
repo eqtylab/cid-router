@@ -20,13 +20,12 @@ impl Context {
         let port = config.port;
 
         let providers = {
-            let mut ps = config
-                .providers
-                .into_iter()
-                .map(|provider| {
-                    let provider = match provider.clone() {
+            let ps = futures::future::join_all(config.providers.into_iter().map(
+                |provider| async move {
+                    match provider.clone() {
                         ProviderConfig::External(external_crp_config) => Box::new(
                             ExternalCrp::new_from_config(external_crp_config, provider)
+                                .await
                                 .expect("failed to create an external crp from config"),
                         )
                             as Box<dyn Crp + Send + Sync>,
@@ -37,22 +36,17 @@ impl Context {
                             as Box<dyn Crp + Send + Sync>,
                         ProviderConfig::Iroh(iroh_crp_config) => Box::new(
                             IrohCrp::new_from_config(iroh_crp_config, provider)
+                                .await
                                 .expect("failed to create an iroh crp from config"),
                         )
                             as Box<dyn Crp + Send + Sync>,
-                    };
-                    let id = provider.provider_id();
-
-                    (id, provider)
-                })
-                .collect::<HashMap<String, Box<dyn Crp + Send + Sync>>>();
-
-            for (_, provider) in ps.iter_mut() {
-                provider.init().await?;
-            }
+                    }
+                },
+            ))
+            .await;
 
             ps.into_iter()
-                .map(|(id, provider)| (id, Arc::from(provider)))
+                .map(|provider| (provider.provider_id(), Arc::from(provider)))
                 .collect::<HashMap<String, Arc<dyn Crp + Send + Sync>>>()
         };
 
