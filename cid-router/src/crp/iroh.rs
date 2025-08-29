@@ -1,16 +1,19 @@
 use std::str::FromStr;
+use std::pin::Pin;
+use bao_tree::io::BaoContentItem;
 
+use futures::{Stream, StreamExt};
 use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use cid_filter::{CidFilter, CodeFilter};
 use iroh::{Endpoint, NodeAddr, NodeId};
-use iroh_blobs::{get::request::get_verified_size, ticket::BlobTicket, BlobFormat, Hash};
+use iroh_blobs::{get::request::{get_verified_size, GetBlobItem}, ticket::BlobTicket, BlobFormat, BlobsProtocol, Hash};
 use routes::{IntoRoute, IrohRouteMethod, Route};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{config::ProviderConfig, crp::Crp};
+use crate::{config::ProviderConfig, crp::{Crp, Resolver}};
 
 #[derive(Debug)]
 pub struct IrohCrp {
@@ -99,5 +102,132 @@ impl Crp for IrohCrp {
 
     fn provider_config(&self) -> Value {
         serde_json::to_value(&self.config).expect("unexpectedly failed to serialize a config type")
+    }
+}
+
+#[async_trait]
+impl Resolver for IrohCrp {
+    async fn get(&self, cid: &Cid, _auth: Vec<u8>) -> Result<
+        Pin<Box<dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>> + Send>>,
+        Box<dyn std::error::Error + Send + Sync>
+    > {
+        let Self { node_addr, .. } = self;
+
+        let hash = cid.hash().digest();
+        let hash: [u8; 32] = hash.try_into()?;
+        let hash = Hash::from_bytes(hash);
+
+        let conn = self
+            .endpoint
+            .connect(node_addr.clone(), iroh_blobs::ALPN)
+            .await?;
+
+        let res = iroh_blobs::get::request::get_blob(conn, hash);
+        let res = res
+            .take_while(|item| {
+                n0_future::future::ready(!matches!(item, GetBlobItem::Done(_)))
+            })
+            .filter_map(|item| {
+                n0_future::future::ready(match item {
+                    GetBlobItem::Item(item) => match item {
+                        BaoContentItem::Leaf(leaf) => {
+                            Some(Ok(bytes::Bytes::from(leaf.data)))
+                        }
+                        // TODO - I don't think this is right. returning None here
+                        // will likely end the stream prematurely
+                        BaoContentItem::Parent(_parent) => {
+                            None
+                        }
+                    },
+                    // This is filtered out, only for compiler happiness
+                    GetBlobItem::Done(_stats) => None,
+                    GetBlobItem::Error(err) => Some(Err(Box::new(err) as Box<dyn std::error::Error + Send + Sync>)),
+                })
+            });
+
+        Ok(Box::pin(res))
+    }
+}
+
+// #[async_trait]
+// impl SizeResolver for IrohCrp {
+//     async fn get_size(&self, cid: &Cid) -> Result<u64> {
+//         let Self { node_addr, .. } = self;
+
+//         let hash = cid.hash().digest();
+//         let hash: [u8; 32] = hash.try_into()?;
+//         let hash = Hash::from_bytes(hash);
+
+//         let connection = self
+//             .endpoint
+//             .connect(node_addr.clone(), iroh_blobs::ALPN)
+//             .await?;
+
+//         let (size, _) = get_verified_size(&connection, &hash).await?;
+
+//         Ok(size)
+//     }
+// }
+//
+
+mod tests {
+    use super::*;
+    use cid::multihash::Multihash;
+    use iroh_blobs::{store::mem::MemStore};
+    use iroh::{protocol::Router, Watcher};
+
+
+    struct Provider {
+        blobs: BlobsProtocol,
+        router: Router,
+    }
+
+    impl Provider {
+        async fn new() -> Self {
+            // make an iroh endpoint
+            let endpoint = Endpoint::builder().discovery_n0().bind().await.unwrap();
+            // initialize an in-memory backing store for iroh-blobs
+            let store = MemStore::new();
+            // initialize a struct that can accept blobs requests over iroh connections
+            let blobs = BlobsProtocol::new(&store, endpoint.clone(), None);
+            // For sending files we build a router that accepts blobs connections & routes them
+            // to the blobs protocol.
+            let router = Router::builder(endpoint)
+                .accept(iroh_blobs::ALPN, blobs.clone())
+                .spawn();
+
+            // return both the router, and the blobs protocol
+            Self { blobs, router }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resolve() {
+        // setup: create provider, add data, get hash & provider address
+        let prov = Provider::new().await;
+        let data = bytes::Bytes::from("oh hello there fren");
+        let res = prov.blobs.add_bytes(data.clone()).await.unwrap();
+        let mh = Multihash::from_bytes(res.hash.as_bytes()).unwrap();
+        let cid = Cid::new_v1(0, mh);
+        let prov_addr = prov.router.endpoint().node_addr().initialized().await;
+
+        // create the CRP, point it at the provider
+        let crp = IrohCrp::new_from_config(
+            IrohCrpConfig { node_addr_ref: IrohNodeAddrRef::NodeId(prov_addr.node_id.to_string())},
+            ProviderConfig::Iroh(IrohCrpConfig { node_addr_ref: IrohNodeAddrRef::NodeId(prov_addr.node_id.to_string()) })
+        ).await.unwrap();
+
+        // run a get
+        let mut res = crp.get(&cid, vec![]).await.unwrap();
+
+        // TODO: should be factored into a get_all wrapper func
+        let mut buffer = bytes::BytesMut::new();
+        while let Some(chunk) = res.next().await {
+            let chunk = chunk.unwrap();
+            buffer.extend_from_slice(&chunk);
+        }
+        let got = buffer.freeze();
+
+        assert_eq!(got, data);
     }
 }
