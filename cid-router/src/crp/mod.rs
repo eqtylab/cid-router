@@ -46,9 +46,18 @@ pub trait Crp {
 /// authentication data.
 #[async_trait]
 pub trait Resolver {
-    async fn get(&self, cid: &Cid, auth: Vec<u8>) -> Result<
-        Pin<Box<dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>> + Send>>,
-        Box<dyn std::error::Error + Send + Sync>
+    async fn get(
+        &self,
+        cid: &Cid,
+        auth: Vec<u8>,
+    ) -> Result<
+        Pin<
+            Box<
+                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
+                    + Send,
+            >,
+        >,
+        Box<dyn std::error::Error + Send + Sync>,
     >;
 }
 
@@ -57,5 +66,9 @@ pub trait Resolver {
 /// and as a fast means of checking if a CRP has the CID in the first place.
 #[async_trait]
 pub trait SizeResolver {
-    async fn get_size(&self, cid: &Cid, auth: Vec<u8>) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_size(
+        &self,
+        cid: &Cid,
+        auth: Vec<u8>,
+    ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
 }
