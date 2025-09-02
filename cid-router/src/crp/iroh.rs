@@ -1,9 +1,8 @@
-use bao_tree::io::BaoContentItem;
-use std::pin::Pin;
-use std::str::FromStr;
+use std::{pin::Pin, str::FromStr};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use bao_tree::io::BaoContentItem;
 use cid::Cid;
 use cid_filter::{CidFilter, CodeFilter};
 use futures::{Stream, StreamExt};
@@ -190,10 +189,11 @@ impl Resolver for IrohCrp {
 //
 
 mod tests {
-    use super::*;
     use cid::multihash::Multihash;
     use iroh::{protocol::Router, Watcher};
     use iroh_blobs::store::mem::MemStore;
+
+    use super::*;
 
     struct Provider {
         blobs: BlobsProtocol,
