@@ -42,6 +42,7 @@
           # this needs to come first in list to override the default rustfmt
           rustfmt-nightly
         ] ++ (with pkgs; [
+          cargo-sort
           ets
           gnumake
           just
