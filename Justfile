@@ -4,6 +4,7 @@ _:
 # Run main CI job
 ci:
     cargo fmt --all -- --check
+    cargo sort --workspace --grouped --check
     cargo build --locked --workspace
     cargo clippy
     cargo test --workspace
