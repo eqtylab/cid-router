@@ -25,10 +25,60 @@ Content address everything.
 |[external-crps](/external-crps)| |
 |&emsp;[azure-blob-storage-crp](/external-crps/azure-blob-storage-crp)|Azure Blob Storage CRP Service |
  
+# Quick Start
+
+Nix is used for managing development environments and build artifacts.
+
+Enter development shell with all required tools:
+
+```shell
+nix develop
+```
+
+# Makefile
+
+There is a Makefile to make the nix-managed builds and docker exports simpler to manage. Build artifacts are placed in `_build/`
+
+Build `cid-router` binary:
+
+```shell
+make bin.cid-router
+```
+
+Build `cid-router` docker image:
+
+```shell
+make image.cid-router`
+```
+
+Build all docker images:
+
+```shell
+make image.all
+```
+
+Build all artifacts:
+
+```shell
+make all
+```
+
 # Justfile
 ```present just
 Available recipes:
     ci            # Run main CI job
     readme-check  # Check auto-generated portions of README.md
     readme-update # Update auto-generated portions of README.md
+```
+
+# Installing Nix
+
+Install
+
+    https://nixos.org/download.html
+
+Configure for using flakes
+
+```shell
+sudo sh -c 'echo "experimental-features = nix-command flakes" >> /etc/nix/nix.conf'
 ```
