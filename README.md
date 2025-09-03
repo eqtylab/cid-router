@@ -17,13 +17,12 @@ Content address everything.
 # Repo Organization
 |||
 |-|-|
-|[cid-router](/cid-router)|CID Router Service |
+|[core](/core)|CID Router Core (Rust lib crate) |
 |[crates](/crates)| |
 |&emsp;[api-utils](/crates/api-utils)|Utility library for API binaries |
-|&emsp;[cid-filter](/crates/cid-filter)|CID filter model |
-|&emsp;[routes](/crates/routes)|Routes model |
-|[external-crps](/external-crps)| |
-|&emsp;[azure-blob-storage-crp](/external-crps/azure-blob-storage-crp)|Azure Blob Storage CRP Service |
+|[crps](/crps)|Crates for individual CID Route Providers |
+|&emsp;[iroh](/crps/iroh)|Iroh CRP Crate |
+|[server](/server)|CID Router Server |
  
 # Quick Start
 

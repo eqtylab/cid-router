@@ -8,9 +8,7 @@ IMAGES := ${BUILD}/images
 KERNEL := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
 services = \
-cid-router \
-azure-blob-storage-crp \
-# github-crp
+cid-router-server
 
 bin-targets := $(addprefix bin., ${services})
 image-targets := $(addprefix image., ${services})
