@@ -85,9 +85,7 @@
             '';
           };
 
-        cid-router = buildWorkspaceBinary ./cid-router;
-        azure-blob-storage-crp = buildWorkspaceBinary ./external-crps/azure-blob-storage-crp;
-        github-crp = buildWorkspaceBinary ./external-crps/github-crp;
+        cid-router-server = buildWorkspaceBinary ./server;
 
         imageBase =
           pkgs.dockerTools.buildLayeredImage {
@@ -127,9 +125,7 @@
             };
           };
 
-        cid-router-image = buildImage cid-router;
-        azure-blob-storage-crp-image = buildImage azure-blob-storage-crp;
-        github-crp-image = buildImage github-crp;
+        cid-router-server-image = buildImage cid-router-server;
 
       in
       rec {
@@ -145,12 +141,8 @@
 
         packages = {
           inherit
-            cid-router
-            cid-router-image
-            azure-blob-storage-crp
-            azure-blob-storage-crp-image
-            github-crp
-            github-crp-image
+            cid-router-server
+            cid-router-server-image
             ;
         };
 

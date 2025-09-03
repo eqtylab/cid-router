@@ -1,9 +1,0 @@
-[package]
-name = "cid-filter"
-version = "0.0.0"
-edition = "2021"
-
-[dependencies]
-cid = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }

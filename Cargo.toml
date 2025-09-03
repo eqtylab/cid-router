@@ -1,13 +1,5 @@
 [workspace]
-members = [
-    "cid-router",
-    "crates/api-utils",
-    "crates/cid-filter",
-    "crates/routes",
-    "external-crps/azure-blob-storage-crp",
-    # temporarily exclude github-crp until we fix its dependencies
-    # "external-crps/github-crp",
-]
+members = ["core", "crates/api-utils", "crps/iroh", "server"]
 resolver = "2"
 
 [workspace.dependencies]

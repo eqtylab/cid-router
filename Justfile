@@ -10,6 +10,12 @@ ci:
     cargo test --workspace
     just readme-check
 
+# Format files
+fmt:
+    cargo fmt --all
+    cargo sort --workspace --grouped
+    nixpkgs-fmt .
+
 # Update auto-generated portions of README.md
 readme-update:
     .readme/update.sh README.md

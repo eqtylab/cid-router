@@ -1,3 +1,0 @@
-# Overview
-
-CID filter model
