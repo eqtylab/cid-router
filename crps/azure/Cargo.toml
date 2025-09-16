@@ -1,0 +1,11 @@
+[package]
+name = "azure"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cid-router-core = { path = "../../core" }
+
+anyhow.workspace = true
+iroh-blobs.workspace = true
+time.workspace = true

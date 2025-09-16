@@ -8,16 +8,16 @@ edition = "2021"
 [dependencies]
 cid-router-core = { path = "../../core" }
 
-anyhow = { workspace = true }
-async-trait = { workspace = true }
-bao-tree = { workspace = true }
-bytes = { workspace = true }
-cid = { workspace = true }
-futures = { workspace = true }
-iroh = { workspace = true }
-iroh-base = { workspace = true }
-iroh-blobs = { workspace = true }
-n0-future = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-tokio = { workspace = true }
+anyhow.workspace = true
+async-trait.workspace = true
+bao-tree.workspace = true
+bytes.workspace = true
+cid.workspace = true
+futures.workspace = true
+iroh.workspace = true
+iroh-base.workspace = true
+iroh-blobs.workspace = true
+n0-future.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

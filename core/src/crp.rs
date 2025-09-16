@@ -4,8 +4,33 @@ use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use futures::Stream;
+use serde::{Deserialize, Serialize};
 
 use crate::{cid_filter::CidFilter, routes::Route};
+
+/// Set of all supported CID Route Providers (CRPs) throughout the system
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
+pub enum ProviderType {
+    Iroh,
+    Azure,
+}
+
+impl ProviderType {
+    pub fn to_string(&self) -> String {
+        match self {
+            ProviderType::Iroh => "iroh".to_string(),
+            ProviderType::Azure => "azure".to_string(),
+        }
+    }
+
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "iroh" => Ok(ProviderType::Iroh),
+            "azure" => Ok(ProviderType::Azure),
+            _ => Err(format!("Unknown provider: {}", s)),
+        }
+    }
+}
 
 /// CID Route Provider (CRP) Trait
 #[async_trait]
