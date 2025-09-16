@@ -1,12 +1,15 @@
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use cid::{Cid, CidGeneric};
 use iroh::PublicKey;
 use iroh_blobs::BlobFormat;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime as DateTime;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime as DateTime};
 use uuid::Uuid;
 
-use crate::{context::Signer, crp::ProviderType};
+use crate::{
+    context::Signer,
+    crp::{Provider, ProviderType},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Route {
@@ -15,23 +18,60 @@ pub struct Route {
     pub created_at: DateTime,
     #[serde(with = "time::serde::rfc3339")]
     pub verified_at: DateTime,
-    pub provider: ProviderType,
-    pub cid: CidGeneric<64>,
-    pub blob_format: BlobFormat,
-    pub size: u64,
+    pub provider_id: String,
+    pub provider_type: ProviderType,
     pub route: String,
+    pub cid: CidGeneric<64>,
+    pub size: u64,
+    pub blob_format: BlobFormat,
     pub creator: PublicKey, // PublicKey or DID
     pub signature: Vec<u8>,
 }
 
 impl Route {
-    pub fn builder(provider: ProviderType) -> RouteBuilder {
+    pub fn builder(provider: &impl Provider) -> RouteBuilder {
         RouteBuilder::new(provider)
+    }
+
+    pub(crate) fn from_sql_row(row: &rusqlite::Row<'_>) -> Result<Route, rusqlite::Error> {
+        // TODO(b5) - remove unwraps!
+        let id = row.get::<_, String>(0)?;
+        let id = Uuid::parse_str(&id).unwrap();
+
+        let data = row.get::<_, Vec<u8>>(6)?;
+        let cid = Cid::try_from(data).unwrap();
+
+        let blob_format_str: String = row.get(8)?;
+        let blob_format = match blob_format_str.as_str() {
+            "Raw" => BlobFormat::Raw,
+            "HashSeq" => BlobFormat::HashSeq,
+            _ => BlobFormat::Raw, // default fallback
+        };
+
+        let pub_key = row.get::<_, [u8; 32]>(9)?;
+        // TODO(b5) - remove unwarp
+        let creator = PublicKey::from_bytes(&pub_key).unwrap();
+
+        Ok(Route {
+            id,
+            created_at: DateTime::parse(&row.get::<_, String>(1)?, &Rfc3339).unwrap(),
+            verified_at: DateTime::parse(&row.get::<_, String>(2)?, &Rfc3339).unwrap(),
+            provider_id: row.get::<_, String>(3)?,
+            provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
+            route: row.get(5)?,
+            cid,
+            size: row.get::<_, i64>(7)? as u64,
+            blob_format,
+            creator,
+            signature: row.get(10)?,
+        })
     }
 }
 
 pub struct RouteBuilder {
-    store: ProviderType,
+    id: Uuid,
+    provider_id: String,
+    provider_type: ProviderType,
     cid: Option<Cid>,
     size: Option<u64>,
     route: Option<String>,
@@ -39,9 +79,11 @@ pub struct RouteBuilder {
 }
 
 impl<'a> RouteBuilder {
-    fn new(store: ProviderType) -> Self {
+    fn new(provider: &impl Provider) -> Self {
         Self {
-            store,
+            id: Uuid::new_v4(),
+            provider_id: provider.provider_id(),
+            provider_type: provider.provider_type(),
             cid: None,
             size: None,
             route: None,
@@ -69,7 +111,22 @@ impl<'a> RouteBuilder {
         self
     }
 
-    pub fn build(&self, signer: &impl Signer) -> Result<Route> {
+    pub fn build_stub(self) -> anyhow::Result<RouteStub> {
+        let route = self.route.ok_or_else(|| anyhow!("route is required"))?;
+        let now = DateTime::now_utc();
+        Ok(RouteStub {
+            id: Uuid::new_v4(),
+            created_at: now,
+            verified_at: now,
+            provider_id: self.provider_id,
+            provider_type: self.provider_type,
+            blob_format: self.blob_format,
+            size: self.size,
+            route,
+        })
+    }
+
+    pub fn build(&self, signer: &impl Signer) -> anyhow::Result<Route> {
         let cid = self.cid.ok_or_else(|| anyhow!("cid is required"))?;
         let size = self.size.ok_or_else(|| anyhow!("size is required"))?;
         let route = self
@@ -84,10 +141,11 @@ impl<'a> RouteBuilder {
         let now = DateTime::now_utc();
 
         Ok(Route {
-            id: Uuid::new_v4(),
+            id: self.id,
             created_at: now,
             verified_at: now,
-            provider: self.store.clone(),
+            provider_id: self.provider_id.clone(),
+            provider_type: self.provider_type.clone(),
             cid,
             size,
             route,
@@ -107,6 +165,57 @@ fn sign_route(
 ) -> Vec<u8> {
     // TODO - finish for real: serialize these values, hash them, and sign hash
     vec![]
+}
+
+/// A Route Stub is a partially-completed route. The core use case here is a
+/// two-step indexing process, where a route is first created with a stub, and
+/// then completed with a full route once the content CID can be calculated &
+/// the route can be signed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RouteStub {
+    pub id: Uuid,
+    pub provider_id: String,
+    pub provider_type: ProviderType,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: DateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub verified_at: DateTime,
+    pub blob_format: Option<BlobFormat>,
+    pub size: Option<u64>,
+    pub route: String,
+}
+
+impl RouteStub {
+    // get a builder from a stub, so it can be completed
+    pub fn builder(&self) -> RouteBuilder {
+        RouteBuilder {
+            id: self.id,
+            provider_id: self.provider_id.clone(),
+            provider_type: self.provider_type.clone(),
+            cid: None,
+            size: self.size,
+            route: Some(self.route.clone()),
+            blob_format: self.blob_format,
+        }
+    }
+
+    pub(crate) fn from_sql_row(row: &rusqlite::Row<'_>) -> Result<RouteStub, rusqlite::Error> {
+        // TODO(b5) - remove unwraps!
+        let id = row.get::<_, String>(0)?;
+        let id = Uuid::parse_str(&id).unwrap();
+
+        Ok(RouteStub {
+            id,
+            created_at: DateTime::parse(&row.get::<_, String>(1)?, &Rfc3339).unwrap(),
+            verified_at: DateTime::parse(&row.get::<_, String>(2)?, &Rfc3339).unwrap(),
+            provider_id: row.get::<_, String>(3)?,
+            provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
+            route: row.get(5)?,
+            // TODO(b5) - accurately capture size & blob format
+            size: None,
+            blob_format: None,
+        })
+    }
 }
 
 // /// A route defining a method for resolving a CID to its content and/or metadata associated with its content.

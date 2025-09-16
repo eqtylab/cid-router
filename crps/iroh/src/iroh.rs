@@ -6,7 +6,7 @@ use bao_tree::io::BaoContentItem;
 use cid::Cid;
 use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
-    crp::{BytesResolver, Crp, CrpCapabilities, RoutesResolver},
+    crp::{BytesResolver, Crp, CrpCapabilities, Provider, RoutesResolver},
     routes::{IntoRoute, IrohRouteMethod, Route},
 };
 use futures::{Stream, StreamExt};
@@ -63,6 +63,16 @@ impl IrohCrp {
             node_addr,
             endpoint,
         })
+    }
+}
+
+impl Provider for IrohCrp {
+    fn provider_id(&self) -> String {
+        "iroh".to_string()
+    }
+
+    fn provider_type(&self) -> ProviderType {
+        ProviderType::Iroh
     }
 }
 

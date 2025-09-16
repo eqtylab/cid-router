@@ -32,6 +32,11 @@ impl ProviderType {
     }
 }
 
+pub trait Provider {
+    fn provider_id(&self) -> String;
+    fn provider_type(&self) -> ProviderType;
+}
+
 /// CID Route Provider (CRP) Trait
 #[async_trait]
 pub trait Crp {

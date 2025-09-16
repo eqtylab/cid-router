@@ -1,11 +1,8 @@
-use cid::Cid;
-use iroh::PublicKey;
-use iroh_blobs::BlobFormat;
 use rusqlite::{params, Connection, Result};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime as DateTime};
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
-use crate::{crp::ProviderType, routes::Route};
+use crate::routes::{Route, RouteStub};
 
 #[derive(Debug)]
 pub struct Db {
@@ -32,16 +29,17 @@ impl Db {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS routes (
                 id TEXT PRIMARY KEY NOT NULL,
-                provider TEXT NOT NULL,
-                cid BLOB,
-                size INTEGER NOT NULL,
-                route TEXT NOT NULL,
-                creator BLOB NOT NULL,
-                signature BLOB NOT NULL,
                 created_at TEXT NOT NULL,
                 verified_at TEXT NOT NULL,
-                blob_format TEXT NOT NULL,
-                UNIQUE(provider, cid)
+                provider_id TEXT NOT NULL,
+                provider_type TEXT NOT NULL,
+                route TEXT NOT NULL,
+                cid BLOB,
+                size INTEGER,
+                creator BLOB,
+                signature BLOB,
+                blob_format TEXT,
+                UNIQUE(provider_id, provider_type, cid)
             )",
             [],
         )?;
@@ -52,8 +50,8 @@ impl Db {
     // Route operations
     pub fn insert_route(&self, route: &Route) -> Result<()> {
         let mut stmt = self.conn.prepare(
-            "INSERT INTO routes (id, provider, cid, size, route, creator, signature, created_at, verified_at, blob_format)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
+            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
         )?;
 
         // TODO(b5) - remove unwraps!
@@ -62,15 +60,16 @@ impl Db {
 
         stmt.execute(params![
             route.id.to_string(),
-            route.provider.to_string(),
-            route.cid.to_bytes(),
-            route.size as i64,
-            route.route,
-            route.creator.as_bytes(),
-            route.signature,
             created,
             verified_at,
+            route.provider_type.to_string(),
+            route.provider_type.to_string(),
+            route.route,
+            route.cid.to_bytes(),
+            route.size as i64,
             route.blob_format.to_string(),
+            route.creator.as_bytes(),
+            route.signature,
         ])?;
 
         Ok(())
@@ -78,11 +77,15 @@ impl Db {
 
     pub fn list_routes(&self, offset: u64, limit: u64) -> Result<Vec<Route>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, provider, cid, size, route, creator, signature, created_at, verified_at, blob_format
-             FROM routes ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE cid is not null
+             ORDER BY created_at DESC
+             LIMIT ?1 OFFSET ?2
+             ",
         )?;
 
-        let route_iter = stmt.query_map(params![limit, offset], Self::route_from_sql_row)?;
+        let route_iter = stmt.query_map(params![limit, offset], Route::from_sql_row)?;
 
         let routes = route_iter.collect::<Result<Vec<Route>>>()?;
 
@@ -91,11 +94,11 @@ impl Db {
 
     pub fn get_route(&self, id: Uuid) -> Result<Option<Route>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, provider, cid, size, route, creator, signature, created_at, verified_at, blob_format
-             FROM routes WHERE id = ?1",
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes WHERE id = ?1 AND cid is not null",
         )?;
 
-        let result = stmt.query_row(params![id.to_string()], Self::route_from_sql_row);
+        let result = stmt.query_row(params![id.to_string()], Route::from_sql_row);
 
         match result {
             Ok(route) => Ok(Some(route)),
@@ -104,16 +107,16 @@ impl Db {
         }
     }
 
-    pub fn routes_for_url(&self, store_type: ProviderType, url: &str) -> Result<Vec<Route>> {
+    pub fn routes_for_url(&self, url: &str) -> Result<Vec<Route>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, provider, cid, size, route, creator, signature, created_at, verified_at, blob_format
-             FROM routes WHERE provider = ?1 AND route = ?2 LIMIT 1",
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE route = ?1
+             AND cid IS NOT NULL
+             LIMIT 1",
         )?;
 
-        let route_iter = stmt.query_map(
-            params![store_type.to_string(), url],
-            Self::route_from_sql_row,
-        )?;
+        let route_iter = stmt.query_map(params![url], Route::from_sql_row)?;
 
         let mut routes = Vec::new();
         for route in route_iter {
@@ -122,57 +125,135 @@ impl Db {
         Ok(routes)
     }
 
-    fn route_from_sql_row(row: &rusqlite::Row<'_>) -> Result<Route> {
+    pub fn all_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE cid IS NOT NULL
+             ORDER BY created_at DESC
+             LIMIT ?1 OFFSET ?2",
+        )?;
+
+        let route_iter = stmt.query_map(params![limit, offset], Route::from_sql_row)?;
+
+        let mut routes = Vec::new();
+        for route in route_iter {
+            routes.push(route?);
+        }
+        Ok(routes)
+    }
+
+    /// list stubs for a given provider
+    pub fn list_provider_stubs(
+        &self,
+        provider_id: &str,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<RouteStub>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE provider_id = ?1
+             ORDER BY created_at DESC
+             LIMIT ?2 OFFSET ?3",
+        )?;
+
+        let route_iter =
+            stmt.query_map(params![provider_id, limit, offset], RouteStub::from_sql_row)?;
+
+        let mut stubs = Vec::new();
+        for stub in route_iter {
+            stubs.push(stub?);
+        }
+        Ok(stubs)
+    }
+
+    pub fn insert_stub(&self, stub: &RouteStub) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        )?;
+
         // TODO(b5) - remove unwraps!
-        let data = row.get::<_, Vec<u8>>(2)?;
-        let cid = Cid::try_from(data).unwrap();
+        let created_at = stub.created_at.format(&Rfc3339).unwrap();
+        let verified_at = stub.verified_at.format(&Rfc3339).unwrap();
 
-        let blob_format_str: String = row.get(9)?;
-        let blob_format = match blob_format_str.as_str() {
-            "Raw" => BlobFormat::Raw,
-            "HashSeq" => BlobFormat::HashSeq,
-            _ => BlobFormat::Raw, // default fallback
-        };
+        stmt.execute(params![
+            stub.id.to_string(),
+            created_at,
+            verified_at,
+            stub.provider_id,
+            stub.provider_type.to_string(),
+            stub.route,
+            None::<Vec<u8>>, // cid
+            None::<i64>,     // size
+            None::<String>,  // blob_format
+            None::<Vec<u8>>, // creator
+            None::<Vec<u8>>, // signature
+        ])?;
 
-        let id = row.get::<_, String>(0)?;
-        // TODO(b5) - remove unwarp
-        let id = Uuid::parse_str(&id).unwrap();
+        Ok(())
+    }
 
-        let pub_key = row.get::<_, [u8; 32]>(5)?;
-        // TODO(b5) - remove unwarp
-        let creator = PublicKey::from_bytes(&pub_key).unwrap();
+    pub fn complete_stub(&self, route: &Route) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "UPDATE routes
+                SET verified_at = ?2, provider_id = ?3, provider_type = ?4, route = ?5,
+                cid = ?6, size = ?7, blob_format = ?8, creator = ?9, signature = ?10
+                WHERE id = ?1",
+        )?;
 
-        Ok(Route {
-            id,
-            provider: ProviderType::from_str(&row.get::<_, String>(1)?).unwrap(),
-            cid,
-            size: row.get::<_, i64>(3)? as u64,
-            route: row.get(4)?,
-            creator,
-            signature: row.get(6)?,
-            created_at: DateTime::parse(&row.get::<_, String>(7)?, &Rfc3339).unwrap(),
-            verified_at: DateTime::parse(&row.get::<_, String>(8)?, &Rfc3339).unwrap(),
-            blob_format,
-        })
+        let verified_at = route.verified_at.format(&Rfc3339).unwrap();
+
+        stmt.execute(params![
+            route.id.to_string(),
+            verified_at,
+            route.provider_id,
+            route.provider_type.to_string(),
+            route.route,
+            route.cid.to_bytes(),
+            route.size as i64,
+            route.blob_format.to_string(),
+            route.creator.as_bytes(),
+            route.signature,
+        ])?;
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::Context;
+    use crate::crp::ProviderType;
+    use crate::{crp::Provider, Context};
+    use cid::Cid;
+    use iroh_blobs::BlobFormat;
 
     use super::*;
 
+    struct StubAzureProvider {}
+
+    impl Provider for StubAzureProvider {
+        fn provider_id(&self) -> String {
+            "azure".to_string()
+        }
+
+        fn provider_type(&self) -> ProviderType {
+            ProviderType::Azure
+        }
+    }
+
     #[test]
-    fn test_basic_operations() {
+    fn test_route_persistence() {
         let ctx = Context::new().unwrap();
         let db = Db::new_in_memory().unwrap();
+        let provider = StubAzureProvider {};
 
         // Test Route
         let cid =
             Cid::try_from("bafkreibme22gw2h7y2h7tg2fhqotaqjucnbc24deqo72b6mkl2egezxhvy").unwrap();
 
-        let route = Route::builder(ProviderType::Azure)
+        let route = Route::builder(&provider)
             .cid(cid)
             .size(1024)
             .route("/test/route".to_string())
@@ -188,9 +269,51 @@ mod tests {
         let retrieved_route = db.get_route(route.id).unwrap().unwrap();
         assert_eq!(retrieved_route.cid, route.cid);
 
-        let retrieved_routes = db
-            .routes_for_url(ProviderType::Azure, &route.route)
+        let retrieved_routes = db.routes_for_url(&route.route).unwrap();
+        assert_eq!(retrieved_routes.len(), 1);
+        assert_eq!(retrieved_routes[0].cid, route.cid);
+    }
+
+    #[test]
+    fn test_stubs() {
+        let ctx = Context::new().unwrap();
+        let db = Db::new_in_memory().unwrap();
+        let provider = StubAzureProvider {};
+
+        let stub = Route::builder(&provider)
+            .route("/test/route".to_string())
+            .build_stub()
             .unwrap();
+
+        db.insert_stub(&stub).unwrap();
+
+        let retrieved_routes = db.routes_for_url(&stub.route).unwrap();
+        assert_eq!(retrieved_routes.len(), 0);
+
+        let stubs = db
+            .list_provider_stubs(&provider.provider_id(), 0, 10000)
+            .unwrap();
+        assert_eq!(stubs.len(), 1);
+
+        assert_eq!(stubs[0].id, stub.id);
+
+        let cid =
+            Cid::try_from("bafkreibme22gw2h7y2h7tg2fhqotaqjucnbc24deqo72b6mkl2egezxhvy").unwrap();
+
+        let route = stubs[0]
+            .builder()
+            .cid(cid)
+            .size(1024)
+            .format(BlobFormat::Raw)
+            .build(&ctx)
+            .unwrap();
+
+        db.complete_stub(&route).unwrap();
+
+        let retrieved_routes = db.all_routes(0, 10000).unwrap();
+        assert_eq!(retrieved_routes.len(), 1);
+
+        let retrieved_routes = db.routes_for_url(&route.route).unwrap();
         assert_eq!(retrieved_routes.len(), 1);
         assert_eq!(retrieved_routes[0].cid, route.cid);
     }
