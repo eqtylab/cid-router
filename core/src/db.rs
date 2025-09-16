@@ -5,7 +5,7 @@ use rusqlite::{params, Connection, Result};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime as DateTime};
 use uuid::Uuid;
 
-use crate::{auth::AuthToken, crp::ProviderType, routes::Route};
+use crate::{crp::ProviderType, routes::Route};
 
 #[derive(Debug)]
 pub struct Db {
@@ -28,23 +28,12 @@ impl Db {
     }
 
     fn create_tables(&self) -> Result<()> {
-        // AuthToken table
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS auth_tokens (
-                id TEXT PRIMARY KEY NOT NULL,
-                provider TEXT NOT NULL,
-                token TEXT NOT NULL,
-                UNIQUE(provider, token)
-            )",
-            [],
-        )?;
-
         // Route table - you can add unique constraints as needed
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS routes (
                 id TEXT PRIMARY KEY NOT NULL,
                 provider TEXT NOT NULL,
-                cid BLOB NOT NULL,
+                cid BLOB,
                 size INTEGER NOT NULL,
                 route TEXT NOT NULL,
                 creator BLOB NOT NULL,
@@ -58,35 +47,6 @@ impl Db {
         )?;
 
         Ok(())
-    }
-
-    // Did operations
-    pub fn insert_auth_token(&self, token: &AuthToken) -> Result<()> {
-        let mut stmt = self
-            .conn
-            .prepare("INSERT INTO auth_tokens (id, provider, token) VALUES (?1, ?2, ?3)")?;
-
-        stmt.execute(params![
-            token.id.to_string(),
-            token.provider_type.to_string(),
-            token.token.clone(),
-        ])?;
-
-        Ok(())
-    }
-
-    pub fn auth_token_for_provider(&self, provider: ProviderType) -> Result<Option<AuthToken>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, provider, token FROM auth_tokens WHERE provider = ?1")?;
-
-        let result = stmt.query_row(params![provider.to_string()], AuthToken::from_sql_row);
-
-        match result {
-            Ok(did) => Ok(Some(did)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
-        }
     }
 
     // Route operations
@@ -208,19 +168,6 @@ mod tests {
         let ctx = Context::new().unwrap();
         let db = Db::new_in_memory().unwrap();
 
-        // Test AuthToken
-        let token = AuthToken::new(
-            ProviderType::Azure,
-            b"such_secret_many_token_much_wow".to_vec(),
-        );
-
-        db.insert_auth_token(&token).unwrap();
-        let retrieved_token = db
-            .auth_token_for_provider(ProviderType::Azure)
-            .unwrap()
-            .unwrap();
-        assert_eq!(retrieved_token.token, token.token);
-
         // Test Route
         let cid =
             Cid::try_from("bafkreibme22gw2h7y2h7tg2fhqotaqjucnbc24deqo72b6mkl2egezxhvy").unwrap();
@@ -241,7 +188,9 @@ mod tests {
         let retrieved_route = db.get_route(route.id).unwrap().unwrap();
         assert_eq!(retrieved_route.cid, route.cid);
 
-        let retrieved_routes = db.routes_for_url(ProviderType::Azure, route.route).unwrap();
+        let retrieved_routes = db
+            .routes_for_url(ProviderType::Azure, &route.route)
+            .unwrap();
         assert_eq!(retrieved_routes.len(), 1);
         assert_eq!(retrieved_routes[0].cid, route.cid);
     }

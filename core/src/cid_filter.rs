@@ -1,16 +1,7 @@
 use std::ops::{BitAnd, BitOr, Not};
 
 use cid::Cid;
-use iroh_blobs::Hash;
 use serde::{Deserialize, Serialize};
-
-const RAW_CODE_POINT: u64 = 0x55;
-const BLAKE_3_CODE_POINT: u64 = 0x1e;
-
-pub fn blake3_hash_to_cid(hash: Hash) -> Cid {
-    let mh = multihash::Multihash::wrap(BLAKE_3_CODE_POINT, hash.as_bytes()).unwrap();
-    Cid::new_v1(RAW_CODE_POINT, mh)
-}
 
 /// CID Filter
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,8 +112,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        multicodec::{DAG_CBOR, RAW},
-        multihash::{BLAKE3, SHA256},
+        cid::mc_codes::{DAG_CBOR, RAW},
+        cid::mh_codes::{BLAKE3, SHA256},
     };
 
     fn blake3_raw() -> Cid {
