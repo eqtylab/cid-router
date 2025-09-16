@@ -22,6 +22,7 @@ iroh.workspace = true
 iroh-base.workspace = true
 iroh-blobs.workspace = true
 log.workspace = true
+multihash.workspace = true
 n0-future.workspace = true
 rand.workspace = true
 rusqlite.workspace = true

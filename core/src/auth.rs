@@ -32,3 +32,11 @@ impl AuthToken {
         })
     }
 }
+
+// extracts token bytes from an authentication token, replacing None-type responses with an empty vector
+pub fn token_bytes(auth_token: Option<AuthToken>) -> Vec<u8> {
+    match auth_token {
+        Some(token) => token.token,
+        None => Vec::new(),
+    }
+}

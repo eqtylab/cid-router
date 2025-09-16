@@ -144,7 +144,7 @@ impl Db {
         }
     }
 
-    pub fn routes_for_url(&self, store_type: ProviderType, url: String) -> Result<Vec<Route>> {
+    pub fn routes_for_url(&self, store_type: ProviderType, url: &str) -> Result<Vec<Route>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, provider, cid, size, route, creator, signature, created_at, verified_at, blob_format
              FROM routes WHERE provider = ?1 AND route = ?2 LIMIT 1",
@@ -225,7 +225,7 @@ mod tests {
         let cid =
             Cid::try_from("bafkreibme22gw2h7y2h7tg2fhqotaqjucnbc24deqo72b6mkl2egezxhvy").unwrap();
 
-        let route = Route::builder(ProviderType::Iroh)
+        let route = Route::builder(ProviderType::Azure)
             .cid(cid)
             .size(1024)
             .route("/test/route".to_string())
@@ -240,5 +240,9 @@ mod tests {
 
         let retrieved_route = db.get_route(route.id).unwrap().unwrap();
         assert_eq!(retrieved_route.cid, route.cid);
+
+        let retrieved_routes = db.routes_for_url(ProviderType::Azure, route.route).unwrap();
+        assert_eq!(retrieved_routes.len(), 1);
+        assert_eq!(retrieved_routes[0].cid, route.cid);
     }
 }

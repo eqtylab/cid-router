@@ -25,8 +25,8 @@ pub struct Route {
 }
 
 impl Route {
-    pub fn builder(store: ProviderType) -> RouteBuilder {
-        RouteBuilder::new(store)
+    pub fn builder(provider: ProviderType) -> RouteBuilder {
+        RouteBuilder::new(provider)
     }
 }
 

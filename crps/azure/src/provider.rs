@@ -9,6 +9,7 @@ use cid_router_core::{
     crp::{BytesResolver, Crp, CrpCapabilities, RoutesResolver},
     routes::{IntoRoute, IrohRouteMethod, Route},
 };
+use crp_iroh::IrohNodeAddrRef;
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};
 use iroh_blobs::{
@@ -105,56 +106,5 @@ impl RoutesResolver for IrohCrp {
         };
 
         Ok(routes)
-    }
-}
-
-#[async_trait]
-impl BytesResolver for IrohCrp {
-    async fn get_bytes(
-        &self,
-        cid: &Cid,
-        _auth: Vec<u8>,
-    ) -> Result<
-        Pin<
-            Box<
-                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
-                    + Send,
-            >,
-        >,
-        Box<dyn std::error::Error + Send + Sync>,
-    > {
-        let Self { node_addr, .. } = self;
-
-        let hash = cid.hash().digest();
-        let hash: [u8; 32] = hash.try_into()?;
-        let hash = Hash::from_bytes(hash);
-
-        let conn = self
-            .endpoint
-            .connect(node_addr.clone(), iroh_blobs::ALPN)
-            .await?;
-
-        println!("get {:?} from {}", hash, node_addr.node_id.fmt_short());
-
-        let res = iroh_blobs::get::request::get_blob(conn, hash);
-        let res = res
-            .take_while(|item| n0_future::future::ready(!matches!(item, GetBlobItem::Done(_))))
-            .filter_map(|item| {
-                n0_future::future::ready(match item {
-                    GetBlobItem::Item(item) => match item {
-                        BaoContentItem::Leaf(leaf) => Some(Ok(bytes::Bytes::from(leaf.data))),
-                        // TODO - I don't think this is right. returning None here
-                        // will likely end the stream prematurely
-                        BaoContentItem::Parent(_parent) => None,
-                    },
-                    // This is filtered out, only for compiler happiness
-                    GetBlobItem::Done(_stats) => None,
-                    GetBlobItem::Error(err) => Some(Err(
-                        Box::new(err) as Box<dyn std::error::Error + Send + Sync>
-                    )),
-                })
-            });
-
-        Ok(Box::pin(res))
     }
 }

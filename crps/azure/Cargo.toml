@@ -5,7 +5,17 @@ edition = "2024"
 
 [dependencies]
 cid-router-core = { path = "../../core" }
+crp-iroh = { path = "../iroh" }
 
 anyhow.workspace = true
+azure_storage.workspace = true
+azure_storage_blobs.workspace = true
+blake3.workspace = true
+cid.workspace = true
+futures.workspace = true
+hex.workspace = true
 iroh-blobs.workspace = true
+log.workspace = true
+serde.workspace = true
 time.workspace = true
+toml.workspace = true
