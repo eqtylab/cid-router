@@ -8,25 +8,49 @@ use futures::StreamExt;
 use iroh_blobs::{BlobFormat, Hash, format::collection::Collection};
 
 use cid_router_core::{
-    Context, auth::token_bytes, cid_filter::blake3_hash_to_cid, crp::ProviderType, routes::Route,
+    Context,
+    auth::token_bytes,
+    cid_filter::blake3_hash_to_cid,
+    crp::{Provider, ProviderType},
+    routes::Route,
 };
 
 use crate::config::{BlobStorageConfig, ContainerBlobFilter, ContainerConfig};
 
 pub struct Indexer<'a> {
     cx: &'a Context,
+    cfg: ContainerConfig,
+    client: ContainerClient,
+}
+
+impl Provider for Indexer<'_> {
+    fn provider_id(&self) -> String {
+        self.cfg.container
+    }
+    fn provider_type(&self) -> ProviderType {
+        ProviderType::Azure
+    }
 }
 
 impl<'a> Indexer<'a> {
-    pub fn init(cx: &Context) -> Result<Self> {
-        Ok(Self { cx })
+    pub fn init(cx: &Context, cfg: ContainerConfig) -> Result<Self> {
+        let ContainerConfig {
+            account,
+            container,
+            filter,
+        } = cfg.clone();
+        // TODO: support credentials for private blob storage
+        let credentials = StorageCredentials::anonymous();
+        let client = BlobServiceClient::new(account, credentials);
+        let client = client.container_client(container);
+        Ok(Self { cx, cfg, client })
     }
 
     pub async fn update_blob_index(&self, blob_storage_config: &BlobStorageConfig) -> Result<()> {
         log::debug!("Updating blob index...");
 
         for container_cfg in &blob_storage_config.containers {
-            self.add_index_entries_for_missing_blobs(container_cfg.clone())
+            self.add_stubs_for_missing_blobs(container_cfg.clone())
                 .await?;
 
             // self.prune_index_entries_for_deleted_or_filtered_blobs(account, container, filter)
@@ -334,20 +358,9 @@ impl<'a> Indexer<'a> {
     //     Ok(())
     // }
 
-    async fn add_index_entries_for_missing_blobs(&self, cfg: ContainerConfig) -> Result<()> {
-        let ContainerConfig {
-            account,
-            container,
-            filter,
-        } = cfg;
-
-        // TODO: support credentials for private blob storage
-        let storage_credentials = StorageCredentials::anonymous();
-
-        let blob_service = BlobServiceClient::new(account.clone(), storage_credentials);
-        let container_client = blob_service.container_client(container.clone());
-
-        let response = container_client
+    async fn add_stubs_for_missing_blobs(&self, cfg: ContainerConfig) -> Result<()> {
+        let response = self
+            .container_client
             .list_blobs()
             .max_results(NonZeroU32::new(10 * 1000).unwrap())
             .into_stream()
@@ -368,22 +381,16 @@ impl<'a> Indexer<'a> {
                 continue;
             }
 
-            if self
-                .cx
-                .db()
-                .routes_for_url(ProviderType::Azure, &url)?
-                .is_empty()
-            {
+            if self.cx.db().routes_for_url(&url)?.is_empty() {
                 let hash = self.calculate_blob_cid(blob, cfg.clone()).await?;
 
-                let route = Route::builder(ProviderType::Azure)
+                let stub = Route::builder(self)
                     .size(blob.properties.content_length)
                     .route(url)
-                    .cid(hash)
                     .format(BlobFormat::Raw)
-                    .build(self.cx)?;
+                    .build_stub()?;
 
-                self.cx.db().insert_route(&route)?;
+                self.cx.db().insert_stub(&stub)?;
             }
         }
 
