@@ -4,6 +4,43 @@ use uuid::Uuid;
 
 use crate::routes::{Route, RouteStub};
 
+pub enum Direction {
+    Asc,
+    Desc,
+}
+
+impl ToString for Direction {
+    fn to_string(&self) -> String {
+        match self {
+            Direction::Asc => "ASC".to_string(),
+            Direction::Desc => "DESC".to_string(),
+        }
+    }
+}
+
+pub enum OrderBy {
+    CreatedAt(Direction),
+    Size(Direction),
+}
+
+impl ToString for OrderBy {
+    fn to_string(&self) -> String {
+        match self {
+            OrderBy::CreatedAt(_) => "created_at".to_string(),
+            OrderBy::Size(_) => "size".to_string(),
+        }
+    }
+}
+
+impl OrderBy {
+    fn direction_string(&self) -> String {
+        match self {
+            OrderBy::CreatedAt(dir) => dir.to_string(),
+            OrderBy::Size(dir) => dir.to_string(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Db {
     conn: Connection,
@@ -75,7 +112,7 @@ impl Db {
         Ok(())
     }
 
-    pub fn list_routes(&self, offset: u64, limit: u64) -> Result<Vec<Route>> {
+    pub fn list_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
@@ -86,6 +123,39 @@ impl Db {
         )?;
 
         let route_iter = stmt.query_map(params![limit, offset], Route::from_sql_row)?;
+
+        let routes = route_iter.collect::<Result<Vec<Route>>>()?;
+
+        Ok(routes)
+    }
+
+    pub fn list_provider_routes(
+        &self,
+        provider_id: &str,
+        order_by: OrderBy,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Route>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE cid is not null
+             AND provider_id = ?1
+             ORDER BY ?2 ?3
+             LIMIT ?4 OFFSET ?5
+             ",
+        )?;
+
+        let route_iter = stmt.query_map(
+            params![
+                provider_id,
+                order_by.column_name(),
+                order_by.direction_string(),
+                limit,
+                offset
+            ],
+            Route::from_sql_row,
+        )?;
 
         let routes = route_iter.collect::<Result<Vec<Route>>>()?;
 
@@ -125,16 +195,24 @@ impl Db {
         Ok(routes)
     }
 
-    pub fn all_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
+    pub fn all_routes(&self, order_by: OrderBy, offset: i64, limit: i64) -> Result<Vec<Route>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid IS NOT NULL
-             ORDER BY created_at DESC
-             LIMIT ?1 OFFSET ?2",
+             ORDER BY ?1 ?2
+             LIMIT ?3 OFFSET ?4",
         )?;
 
-        let route_iter = stmt.query_map(params![limit, offset], Route::from_sql_row)?;
+        let route_iter = stmt.query_map(
+            params![
+                order_by.to_string(),
+                order_by.direction_string(),
+                limit,
+                offset
+            ],
+            Route::from_sql_row,
+        )?;
 
         let mut routes = Vec::new();
         for route in route_iter {
@@ -147,6 +225,7 @@ impl Db {
     pub fn list_provider_stubs(
         &self,
         provider_id: &str,
+        order_by: OrderBy,
         offset: u64,
         limit: u64,
     ) -> Result<Vec<RouteStub>> {
@@ -154,12 +233,20 @@ impl Db {
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE provider_id = ?1
-             ORDER BY created_at DESC
-             LIMIT ?2 OFFSET ?3",
+             ORDER BY ?2 ?3
+             LIMIT ?4 OFFSET ?5",
         )?;
 
-        let route_iter =
-            stmt.query_map(params![provider_id, limit, offset], RouteStub::from_sql_row)?;
+        let route_iter = stmt.query_map(
+            params![
+                provider_id,
+                order_by.to_string(),
+                order_by.direction_string(),
+                limit,
+                offset
+            ],
+            RouteStub::from_sql_row,
+        )?;
 
         let mut stubs = Vec::new();
         for stub in route_iter {
@@ -291,7 +378,12 @@ mod tests {
         assert_eq!(retrieved_routes.len(), 0);
 
         let stubs = db
-            .list_provider_stubs(&provider.provider_id(), 0, 10000)
+            .list_provider_stubs(
+                &provider.provider_id(),
+                OrderBy::CreatedAt(Direction::Desc),
+                0,
+                10000,
+            )
             .unwrap();
         assert_eq!(stubs.len(), 1);
 
@@ -310,7 +402,9 @@ mod tests {
 
         db.complete_stub(&route).unwrap();
 
-        let retrieved_routes = db.all_routes(0, 10000).unwrap();
+        let retrieved_routes = db
+            .all_routes(OrderBy::CreatedAt(Direction::Asc), 0, 10000)
+            .unwrap();
         assert_eq!(retrieved_routes.len(), 1);
 
         let retrieved_routes = db.routes_for_url(&route.route).unwrap();

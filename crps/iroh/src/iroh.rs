@@ -6,8 +6,8 @@ use bao_tree::io::BaoContentItem;
 use cid::Cid;
 use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
-    crp::{BytesResolver, Crp, CrpCapabilities, Provider, RoutesResolver},
-    routes::{IntoRoute, IrohRouteMethod, Route},
+    crp::{BytesResolver, Crp, CrpCapabilities, Provider, ProviderType, RoutesResolver},
+    routes::Route,
 };
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};

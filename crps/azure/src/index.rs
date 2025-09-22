@@ -10,20 +10,21 @@ use iroh_blobs::{BlobFormat, Hash, format::collection::Collection};
 use cid_router_core::{
     Context,
     auth::token_bytes,
+    cid::Codec,
     cid_filter::blake3_hash_to_cid,
     crp::{Provider, ProviderType},
-    routes::Route,
+    db::{Direction, OrderBy},
+    routes::{Route, RouteStub},
 };
 
 use crate::config::{BlobStorageConfig, ContainerBlobFilter, ContainerConfig};
 
-pub struct Indexer<'a> {
-    cx: &'a Context,
+pub struct Indexer {
     cfg: ContainerConfig,
     client: ContainerClient,
 }
 
-impl Provider for Indexer<'_> {
+impl Provider for Indexer {
     fn provider_id(&self) -> String {
         self.cfg.container
     }
@@ -32,8 +33,8 @@ impl Provider for Indexer<'_> {
     }
 }
 
-impl<'a> Indexer<'a> {
-    pub fn init(cx: &Context, cfg: ContainerConfig) -> Result<Self> {
+impl Indexer {
+    pub fn init(cfg: ContainerConfig) -> Result<Self> {
         let ContainerConfig {
             account,
             container,
@@ -43,14 +44,18 @@ impl<'a> Indexer<'a> {
         let credentials = StorageCredentials::anonymous();
         let client = BlobServiceClient::new(account, credentials);
         let client = client.container_client(container);
-        Ok(Self { cx, cfg, client })
+        Ok(Self { cfg, client })
     }
 
-    pub async fn update_blob_index(&self, blob_storage_config: &BlobStorageConfig) -> Result<()> {
+    pub async fn update_blob_index(
+        &self,
+        cx: &Context,
+        blob_storage_config: &BlobStorageConfig,
+    ) -> Result<()> {
         log::debug!("Updating blob index...");
 
         for container_cfg in &blob_storage_config.containers {
-            self.add_stubs_for_missing_blobs(container_cfg.clone())
+            self.add_stubs_for_missing_blobs(cx, container_cfg.clone())
                 .await?;
 
             // self.prune_index_entries_for_deleted_or_filtered_blobs(account, container, filter)
@@ -62,303 +67,239 @@ impl<'a> Indexer<'a> {
         Ok(())
     }
 
-    // pub async fn update_blob_index_hashes(
-    //     &self,
-    //     blob_storage_config: &BlobStorageConfig,
-    // ) -> Result<()> {
-    //     log::debug!("Updating blob index hashes...");
+    pub async fn update_blob_index_hashes(
+        &self,
+        cx: &Context,
+        blob_storage_config: &BlobStorageConfig,
+    ) -> Result<()> {
+        log::debug!("Updating blob index hashes...");
 
-    //     let auth_token = self.cx.db().auth_token_for_provider(ProviderType::Azure)?;
-    //     let auth_token_bytes = token_bytes(auth_token);
+        let stubs = cx.db().list_provider_stubs(
+            self.provider_id(),
+            OrderBy::Size(Direction::Asc),
+            0,
+            -1,
+        )?;
 
-    //     // TODO: this isn't the best way to do things but for now is a nice way of leaving massive
-    //     //       blobs until last
-    //     for mb_size_cutoff in [
-    //         // doubling sequence from 1MB to ~1TB
-    //         1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
-    //         131072, 262144, 524288, 1048576,
-    //     ] {
-    //         log::trace!("Computing hashes for blobs <= {} MB...", mb_size_cutoff);
+        for stub in stubs {
+            let RouteStub { route, size, .. } = stub;
 
-    //         let rtx = self.db.begin_read()?;
-    //         let table = rtx.open_table(BLOB_INDEX_TABLE)?;
+            log::trace!("Streaming blob to compute hash: size={size} container={container}");
 
-    //         for entry in table.iter()? {
-    //             let (key, value) = entry?;
-    //             let (blob_id, blob_info) =
-    //                 (BlobId::from(key.value()), BlobInfo::from(value.value()));
+            let hash = {
+                let mut hasher = blake3::Hasher::new();
 
-    //             let BlobId {
-    //                 account,
-    //                 container,
-    //                 name,
-    //             } = blob_id.clone();
-    //             let BlobInfo { size, hash, .. } = blob_info;
+                if let Some(size) = size
+                    && size == 0
+                {
+                    hasher.update(&[]);
+                } else {
+                    let blob_client = self.client.blob_client(&name);
+                    let mut blob_stream = blob_client.get().into_stream();
 
-    //             if size > mb_size_cutoff * 1024 * 1024 {
-    //                 continue;
-    //             }
+                    while let Some(chunk_response) = blob_stream.next().await {
+                        let chunk_response = chunk_response?;
+                        let chunk = chunk_response.data.collect().await?;
 
-    //             // skip if hash is already computed
-    //             if hash.is_some() {
-    //                 continue;
-    //             }
+                        hasher.update(&chunk);
+                    }
+                }
+                hasher.finalize().as_bytes().to_owned()
+            };
 
-    //             log::trace!(
-    //                 "Streaming blob to compute hash: size={size} account={account} container={container} name={name}"
-    //             );
+            log::trace!(
+                "Computed hash={hash} for blob: account={account} container={container} name={name}",
+                hash = hex::encode(hash)
+            );
 
-    //             let account = account.to_string();
-    //             let container = container.to_string();
-    //             let name = name.to_string();
+            let cid = blake3_hash_to_cid(hash, Codec::Raw);
 
-    //             let hash = {
-    //                 let mut hasher = blake3::Hasher::new();
+            let completed_route = stub.builder().cid(cid).build(cx)?;
 
-    //                 if size == 0 {
-    //                     hasher.update(&[]);
-    //                 } else {
-    //                     let storage_credentials = StorageCredentials::anonymous();
-    //                     let blob_service = BlobServiceClient::new(&account, storage_credentials);
-    //                     let container_client = blob_service.container_client(&container);
-    //                     let blob_client = container_client.blob_client(&name);
-    //                     let mut blob_stream = blob_client.get().into_stream();
+            cx.db.complete_stub(completed_route)?;
 
-    //                     while let Some(chunk_response) = blob_stream.next().await {
-    //                         let chunk_response = chunk_response?;
-    //                         let chunk = chunk_response.data.collect().await?;
+            self.update_blob_index_entry(blob_id, new_blob_info, Some(blob_info))?;
+        }
 
-    //                         hasher.update(&chunk);
-    //                     }
-    //                 }
+        log::debug!("Finished updating blob index hashes.");
 
-    //                 hasher.finalize().as_bytes().to_owned()
-    //             };
+        Ok(())
+    }
 
-    //             log::trace!(
-    //                 "Computed hash={hash} for blob: account={account} container={container} name={name}",
-    //                 hash = hex::encode(hash)
-    //             );
+    pub fn update_iroh_collections_index(
+        &self,
+        cx: &Context,
+        blob_storage_config: &BlobStorageConfig,
+    ) -> Result<()> {
+        log::debug!("Updating iroh collections index...");
 
-    //             let now = chrono::Utc::now().timestamp();
+        // get all routes in thie container
+        let blobs = cx.db().list_provider_routes(
+            self.provider_id(),
+            OrderBy::Size(Direction::Asc),
+            0,
+            -1,
+        )?;
 
-    //             let new_blob_info = BlobInfo {
-    //                 hash: Some(hash),
-    //                 time_last_checked: now,
-    //                 ..blob_info.clone()
-    //             };
+        // group blobs into collections they are a part of, blobs belong to multiple collections
+        // if they have multiple parent directories (multiple slashes in their name)
+        let collections_map = {
+            let mut cs = MultiMap::new();
 
-    //             self.update_blob_index_entry(blob_id, new_blob_info, Some(blob_info))?;
-    //         }
-    //     }
+            for (name, blob_info) in &blobs {
+                let mut parts = name.as_str().split('/').collect::<Vec<_>>();
+                parts.pop(); // remove the filename
 
-    //     log::debug!("Finished updating blob index hashes.");
+                let mut path = String::new();
 
-    //     Ok(())
-    // }
+                for part in parts {
+                    path.push_str(part);
 
-    // pub fn update_iroh_collections_index(
-    //     &self,
-    //     blob_storage_config: &BlobStorageConfig,
-    // ) -> Result<()> {
-    //     log::debug!("Updating iroh collections index...");
+                    cs.insert(path.clone(), (name.as_str(), blob_info));
 
-    //     for ContainerConfig {
-    //         account,
-    //         container,
-    //         filter,
-    //     } in &blob_storage_config.containers
-    //     {
-    //         // get all blobs in this container for the configured filter
-    //         let blobs = {
-    //             let rtx = self.db.begin_read()?;
-    //             let table = rtx.open_table(BLOB_INDEX_TABLE)?;
+                    path.push('/');
+                }
+            }
 
-    //             table
-    //                 .iter()?
-    //                 .map(|entry| {
-    //                     let (key, value) = entry?;
-    //                     let (blob_id, blob_info) =
-    //                         (BlobId::from(key.value()), BlobInfo::from(value.value()));
+            cs
+        };
 
-    //                     let blob = if blob_id.account == *account
-    //                         && blob_id.container == *container
-    //                         && filter.blob_is_match(&blob_id.name, blob_info.size)
-    //                     {
-    //                         Some((blob_id.name, blob_info))
-    //                     } else {
-    //                         None
-    //                     };
+        // filter out collections containing blobs that aren't hashed yet
+        let collections_map = collections_map
+            .into_iter()
+            .filter_map(|(path, blobs)| {
+                let mut bs = vec![];
+                for (name, blob_info) in blobs {
+                    let hash = blob_info.hash;
+                    let hash = hash?;
+                    bs.push((name, (hash, blob_info)));
+                }
+                Some((path, bs))
+            })
+            .collect::<MultiMap<_, _>>();
 
-    //                     Ok(blob)
-    //                 })
-    //                 .collect::<Result<Vec<_>>>()?
-    //                 .into_iter()
-    //                 .flatten()
-    //                 .collect::<Vec<_>>()
-    //         };
+        // compute iroh collection blobs
+        let collections_blobs = collections_map
+                .iter_all()
+                .map(|(path, blobs)| {
+                    let mut blobs = blobs
+                        .iter()
+                        .map(|(name, (hash, blob_info))| {
+                            let name = name.strip_prefix(path).expect("failed to strip path prefix in a way that indicates collections indexer logic has a bug").to_owned();
+                            let hash = Hash::from_bytes(*hash);
+                            (name, hash, blob_info)
+                        })
+                        .collect::<Vec<_>>();
 
-    //         // group blobs into collections they are a part of, blobs belong to multiple collections
-    //         // if they have multiple parent directories (multiple slashes in their name)
-    //         let collections_map = {
-    //             let mut cs = MultiMap::new();
+                    // alphabetical order of path names for collection sequence
+                    blobs.sort_by(|(a, ..), (b, ..)| a.cmp(b));
 
-    //             for (name, blob_info) in &blobs {
-    //                 let mut parts = name.as_str().split('/').collect::<Vec<_>>();
-    //                 parts.pop(); // remove the filename
+                    let collection = Collection::from_iter(blobs.clone().into_iter().map(|(name, hash, ..)| (name, hash)));
 
-    //                 let mut path = String::new();
+                    let collection_blob = match collection.to_blobs().collect::<Vec<_>>().as_slice() {
+                        [_meta_blob, collection_blob] => collection_blob.clone(),
+                        bs => panic!("expected two blobs, found {}.", bs.len()),
+                    };
 
-    //                 for part in parts {
-    //                     path.push_str(part);
+                    let collection_hash: [u8; 32] = blake3::hash(&collection_blob).into();
 
-    //                     cs.insert(path.clone(), (name.as_str(), blob_info));
+                    let timestamp = blobs.iter().map(|(_, _, blob_info)| blob_info.timestamp).max().expect("expected at least one blob in a collection");
+                    let size = blobs.iter().map(|(_, _, blob_info)| blob_info.size).sum::<u64>();
 
-    //                     path.push('/');
-    //                 }
-    //             }
+                    (path.to_owned(), collection_hash, (timestamp, size))
+                })
+                .collect::<Vec<_>>();
 
-    //             cs
-    //         };
+        // update iroh collection index
+        let wtx = self.db.begin_write()?;
+        {
+            let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
+            let mut collection_hash_table = wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
 
-    //         // filter out collections containing blobs that aren't hashed yet
-    //         let collections_map = collections_map
-    //             .into_iter()
-    //             .filter_map(|(path, blobs)| {
-    //                 let mut bs = vec![];
-    //                 for (name, blob_info) in blobs {
-    //                     let hash = blob_info.hash;
-    //                     let hash = hash?;
-    //                     bs.push((name, (hash, blob_info)));
-    //                 }
-    //                 Some((path, bs))
-    //             })
-    //             .collect::<MultiMap<_, _>>();
+            for (path, collection_hash, (timestamp, size)) in &collections_blobs {
+                let account = account.clone();
+                let container = container.clone();
 
-    //         // compute iroh collection blobs
-    //         let collections_blobs = collections_map
-    //             .iter_all()
-    //             .map(|(path, blobs)| {
-    //                 let mut blobs = blobs
-    //                     .iter()
-    //                     .map(|(name, (hash, blob_info))| {
-    //                         let name = name.strip_prefix(path).expect("failed to strip path prefix in a way that indicates collections indexer logic has a bug").to_owned();
-    //                         let hash = Hash::from_bytes(*hash);
-    //                         (name, hash, blob_info)
-    //                     })
-    //                     .collect::<Vec<_>>();
+                let blob_id = BlobIdTuple::from(BlobId {
+                    account,
+                    container,
+                    name: path.clone(),
+                });
 
-    //                 // alphabetical order of path names for collection sequence
-    //                 blobs.sort_by(|(a, ..), (b, ..)| a.cmp(b));
+                let existing_entry = {
+                    let rtx = self.db.begin_read()?;
+                    let table = rtx.open_table(COLLECTION_INDEX_TABLE)?;
 
-    //                 let collection = Collection::from_iter(blobs.clone().into_iter().map(|(name, hash, ..)| (name, hash)));
+                    table.get(&blob_id)?
+                };
 
-    //                 let collection_blob = match collection.to_blobs().collect::<Vec<_>>().as_slice() {
-    //                     [_meta_blob, collection_blob] => collection_blob.clone(),
-    //                     bs => panic!("expected two blobs, found {}.", bs.len()),
-    //                 };
+                let now = chrono::Utc::now().timestamp();
 
-    //                 let collection_hash: [u8; 32] = blake3::hash(&collection_blob).into();
+                let blob_info = BlobInfoTuple::from(BlobInfo {
+                    timestamp: *timestamp,
+                    size: *size,
+                    hash: Some(*collection_hash),
+                    time_first_indexed: existing_entry
+                        .map(|v| v.value())
+                        .map(BlobInfo::from)
+                        .map(|info| info.time_first_indexed)
+                        .unwrap_or(now),
+                    time_last_checked: now,
+                });
 
-    //                 let timestamp = blobs.iter().map(|(_, _, blob_info)| blob_info.timestamp).max().expect("expected at least one blob in a collection");
-    //                 let size = blobs.iter().map(|(_, _, blob_info)| blob_info.size).sum::<u64>();
+                collection_index_table.insert(&blob_id, blob_info)?;
+                collection_hash_table.insert(collection_hash, blob_id)?;
+            }
+        }
+        wtx.commit()?;
 
-    //                 (path.to_owned(), collection_hash, (timestamp, size))
-    //             })
-    //             .collect::<Vec<_>>();
+        // // prune any iroh collection paths no longer present in this container
+        // let current_collection_paths = collections_blobs
+        //     .iter()
+        //     .map(|(path, ..)| path.clone())
+        //     .collect::<Vec<_>>();
 
-    //         // update iroh collection index
-    //         let wtx = self.db.begin_write()?;
-    //         {
-    //             let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
-    //             let mut collection_hash_table =
-    //                 wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
+        // let rtx = self.db.begin_read()?;
+        // let table_collection_paths = rtx
+        //     .open_table(COLLECTION_INDEX_TABLE)?
+        //     .iter()?
+        //     .filter_map(|entry| {
+        //         let (key, value) = entry.unwrap();
+        //         let (blob_id, blob_info) =
+        //             (BlobId::from(key.value()), BlobInfo::from(value.value()));
 
-    //             for (path, collection_hash, (timestamp, size)) in &collections_blobs {
-    //                 let account = account.clone();
-    //                 let container = container.clone();
+        //         if blob_id.account == *account && blob_id.container == *container {
+        //             Some((blob_id, blob_info))
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .collect::<Vec<_>>();
 
-    //                 let blob_id = BlobIdTuple::from(BlobId {
-    //                     account,
-    //                     container,
-    //                     name: path.clone(),
-    //                 });
+        // for (blob_id, blob_info) in table_collection_paths {
+        //     if !current_collection_paths.contains(&blob_id.name) {
+        //         let blob_id = BlobIdTuple::from(blob_id);
 
-    //                 let existing_entry = {
-    //                     let rtx = self.db.begin_read()?;
-    //                     let table = rtx.open_table(COLLECTION_INDEX_TABLE)?;
+        //         let wtx = self.db.begin_write()?;
+        //         {
+        //             let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
+        //             let mut collection_hash_table =
+        //                 wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
 
-    //                     table.get(&blob_id)?
-    //                 };
+        //             collection_index_table.remove(&blob_id)?;
+        //             if let Some(hash) = blob_info.hash {
+        //                 collection_hash_table.remove(hash, blob_id)?;
+        //             }
+        //         }
+        //     }
+        // }
 
-    //                 let now = chrono::Utc::now().timestamp();
+        log::debug!("Finished updating iroh collections index.");
 
-    //                 let blob_info = BlobInfoTuple::from(BlobInfo {
-    //                     timestamp: *timestamp,
-    //                     size: *size,
-    //                     hash: Some(*collection_hash),
-    //                     time_first_indexed: existing_entry
-    //                         .map(|v| v.value())
-    //                         .map(BlobInfo::from)
-    //                         .map(|info| info.time_first_indexed)
-    //                         .unwrap_or(now),
-    //                     time_last_checked: now,
-    //                 });
+        Ok(())
+    }
 
-    //                 collection_index_table.insert(&blob_id, blob_info)?;
-    //                 collection_hash_table.insert(collection_hash, blob_id)?;
-    //             }
-    //         }
-    //         wtx.commit()?;
-
-    //         // prune any iroh collection paths no longer present in this container
-    //         let current_collection_paths = collections_blobs
-    //             .iter()
-    //             .map(|(path, ..)| path.clone())
-    //             .collect::<Vec<_>>();
-
-    //         let rtx = self.db.begin_read()?;
-    //         let table_collection_paths = rtx
-    //             .open_table(COLLECTION_INDEX_TABLE)?
-    //             .iter()?
-    //             .filter_map(|entry| {
-    //                 let (key, value) = entry.unwrap();
-    //                 let (blob_id, blob_info) =
-    //                     (BlobId::from(key.value()), BlobInfo::from(value.value()));
-
-    //                 if blob_id.account == *account && blob_id.container == *container {
-    //                     Some((blob_id, blob_info))
-    //                 } else {
-    //                     None
-    //                 }
-    //             })
-    //             .collect::<Vec<_>>();
-
-    //         for (blob_id, blob_info) in table_collection_paths {
-    //             if !current_collection_paths.contains(&blob_id.name) {
-    //                 let blob_id = BlobIdTuple::from(blob_id);
-
-    //                 let wtx = self.db.begin_write()?;
-    //                 {
-    //                     let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
-    //                     let mut collection_hash_table =
-    //                         wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
-
-    //                     collection_index_table.remove(&blob_id)?;
-    //                     if let Some(hash) = blob_info.hash {
-    //                         collection_hash_table.remove(hash, blob_id)?;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     log::debug!("Finished updating iroh collections index.");
-
-    //     Ok(())
-    // }
-
-    async fn add_stubs_for_missing_blobs(&self, cfg: ContainerConfig) -> Result<()> {
+    async fn add_stubs_for_missing_blobs(&self, cx: &Context, cfg: ContainerConfig) -> Result<()> {
         let response = self
             .container_client
             .list_blobs()
@@ -381,30 +322,23 @@ impl<'a> Indexer<'a> {
                 continue;
             }
 
-            if self.cx.db().routes_for_url(&url)?.is_empty() {
-                let hash = self.calculate_blob_cid(blob, cfg.clone()).await?;
-
+            if cx.db().routes_for_url(&url)?.is_empty() {
                 let stub = Route::builder(self)
                     .size(blob.properties.content_length)
                     .route(url)
                     .format(BlobFormat::Raw)
                     .build_stub()?;
 
-                self.cx.db().insert_stub(&stub)?;
+                cx.db().insert_stub(&stub)?;
             }
         }
 
         Ok(())
     }
 
-    async fn calculate_blob_cid(&self, blob: &Blob, cfg: ContainerConfig) -> Result<Cid> {
-        let ContainerConfig {
-            account,
-            container,
-            filter,
-        } = cfg;
-        let size = blob.properties.content_length;
-        let name = blob.name;
+    async fn calculate_blob_cid(&self, stub: &RouteStub) -> Result<Cid> {
+        let size = stub.size;
+        let name = stub.route;
 
         log::trace!(
             "Streaming blob to compute hash: size={size} account={account} container={container} name={name}"
@@ -416,10 +350,7 @@ impl<'a> Indexer<'a> {
             if size == 0 {
                 hasher.update(&[]);
             } else {
-                let storage_credentials = StorageCredentials::anonymous();
-                let blob_service = BlobServiceClient::new(&account, storage_credentials);
-                let container_client = blob_service.container_client(&container);
-                let blob_client = container_client.blob_client(&name);
+                let blob_client = self.client.blob_client(&name);
                 let mut blob_stream = blob_client.get().into_stream();
 
                 while let Some(chunk_response) = blob_stream.next().await {
@@ -438,7 +369,7 @@ impl<'a> Indexer<'a> {
             hash = hex::encode(hash)
         );
 
-        let cid = blake3_hash_to_cid(hash);
+        let cid = blake3_hash_to_cid(hash, Codec::Raw);
         Ok(cid)
     }
 
@@ -489,57 +420,6 @@ impl<'a> Indexer<'a> {
     //             self.delete_blob_index_entry(&blob_id)?;
     //         }
     //     }
-
-    //     Ok(())
-    // }
-
-    // fn update_blob_index_entry(
-    //     &self,
-    //     blob_id: BlobId,
-    //     new_blob_info: BlobInfo,
-    //     current_blob_info: Option<BlobInfo>,
-    // ) -> Result<()> {
-    //     log::trace!(
-    //         "{action} blob entry: account={account} container={container} name={name} t={timestamp} size={size}",
-    //         action = if current_blob_info.is_some() {
-    //             "Updating"
-    //         } else {
-    //             "Creating"
-    //         },
-    //         account = blob_id.account,
-    //         container = blob_id.container,
-    //         name = blob_id.name,
-    //         timestamp = new_blob_info.timestamp,
-    //         size = new_blob_info.size,
-    //     );
-
-    //     let BlobInfo { hash: new_hash, .. } = new_blob_info;
-
-    //     let blob_id = BlobIdTuple::from(blob_id);
-    //     let new_blob_info = BlobInfoTuple::from(new_blob_info);
-
-    //     let wtx = self.db.begin_write()?;
-    //     {
-    //         let mut table = wtx.open_table(BLOB_INDEX_TABLE)?;
-    //         table.insert(&blob_id, new_blob_info)?;
-
-    //         // if present, remove the old hash from the hash index (for this blob id only)
-    //         if let Some(BlobInfo {
-    //             hash: Some(old_hash),
-    //             ..
-    //         }) = current_blob_info
-    //         {
-    //             wtx.open_multimap_table(BLOB_HASH_INDEX_TABLE)?
-    //                 .remove(old_hash, &blob_id)?;
-    //         }
-
-    //         // if present, insert the new hash into the hash index
-    //         if let Some(new_hash) = new_hash {
-    //             wtx.open_multimap_table(BLOB_HASH_INDEX_TABLE)?
-    //                 .insert(new_hash, blob_id)?;
-    //         }
-    //     }
-    //     wtx.commit()?;
 
     //     Ok(())
     // }
