@@ -6,7 +6,7 @@ use cid::Cid;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::{cid_filter::CidFilter, routes::Route};
+use crate::{cid_filter::CidFilter, Context};
 
 /// Set of all supported CID Route Providers (CRPs) throughout the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
@@ -51,16 +51,23 @@ pub trait Crp {
 
 /// All capabilities a CRP may have represented as self-referential trait objects.
 pub struct CrpCapabilities<'a> {
-    pub routes_resolver: Option<&'a dyn RoutesResolver>,
+    pub routes_indexer: Option<&'a dyn RoutesIndexer>,
     pub bytes_resolver: Option<&'a dyn BytesResolver>,
     pub size_resolver: Option<&'a dyn SizeResolver>,
 }
 
-/// A RoutesResolver can provide routes for a given CID.
+/// An Indexer is capable of updating the sqlite database of routes held by core,
+/// building & updating an index of routes available from the provider
 #[async_trait]
-pub trait RoutesResolver {
-    async fn get_routes(&self, cid: &Cid) -> Result<Vec<Route>>;
+pub trait RoutesIndexer {
+    async fn reindex(&self, cx: &Context) -> Result<()>;
 }
+
+// /// A RoutesResolver can provide routes for a given CID.
+// #[async_trait]
+// pub trait RoutesResolver {
+//     async fn get_routes(&self, cid: &Cid) -> Result<Vec<Route>>;
+// }
 
 /// A BytesResolver can dereference a CID pointer, turning it into a stream of bytes, accepting
 /// authentication data.

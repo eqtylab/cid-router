@@ -4,7 +4,7 @@ use anyhow::Result;
 use iroh::{PublicKey, SecretKey};
 use iroh_base::Signature;
 
-use crate::{crp::ProviderType, db::Db};
+use crate::{crp::ProviderType, db::Db, repo::Repo};
 
 // Context bundles shared state to pass around different parts of a program,
 // like CID Route Providers (CRPs) and API wrappers. It bundles identity
@@ -22,7 +22,23 @@ struct Inner {
 }
 
 impl Context {
-    pub fn new() -> Result<Self> {
+    pub async fn from_repo(repo: Repo) -> Result<Self> {
+        let db = repo.db()?;
+        let key = repo.secret_key().await?;
+        let secrets = HashMap::new();
+
+        let inner = Inner {
+            db,
+            key,
+            access_tokens: secrets,
+        };
+
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
+    pub fn mem() -> Result<Self> {
         let db = Db::new_in_memory()?;
         let key = SecretKey::generate(rand::rngs::OsRng);
         let secrets = HashMap::new();

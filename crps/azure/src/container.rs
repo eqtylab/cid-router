@@ -1,44 +1,52 @@
-use std::{collections::HashMap, num::NonZeroU32, path::PathBuf};
+use std::num::NonZeroU32;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use async_trait::async_trait;
 use azure_storage::prelude::*;
-use azure_storage_blobs::prelude::*;
-use cid::{Cid, multihash::Multihash};
+use azure_storage_blobs::{blob::Blob, prelude::*};
+use cid::Cid;
 use futures::StreamExt;
 use iroh_blobs::{BlobFormat, Hash, format::collection::Collection};
 
 use cid_router_core::{
     Context,
-    auth::token_bytes,
-    cid::Codec,
-    cid_filter::blake3_hash_to_cid,
-    crp::{Provider, ProviderType},
+    cid::{Codec, blake3_hash_to_cid},
+    crp::{Provider, ProviderType, RoutesIndexer},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
 
-use crate::config::{BlobStorageConfig, ContainerBlobFilter, ContainerConfig};
+use crate::config::{BlobStorageConfig, ContainerConfig};
 
-pub struct Indexer {
+/// An indexer can perform route indexing operations, scoped to a single azure
+/// blob container.
+#[derive(Debug)]
+pub struct Container {
     cfg: ContainerConfig,
     client: ContainerClient,
 }
 
-impl Provider for Indexer {
+impl Provider for Container {
     fn provider_id(&self) -> String {
-        self.cfg.container
+        self.cfg.container.clone()
     }
     fn provider_type(&self) -> ProviderType {
         ProviderType::Azure
     }
 }
 
-impl Indexer {
-    pub fn init(cfg: ContainerConfig) -> Result<Self> {
+#[async_trait]
+impl RoutesIndexer for Container {
+    async fn reindex(&self, _cx: &Context) -> Result<()> {
+        // self.add_stubs_for_missing_blobs(cx, cfg)
+        todo!()
+    }
+}
+
+impl Container {
+    pub fn new(cfg: ContainerConfig) -> Result<Self> {
         let ContainerConfig {
-            account,
-            container,
-            filter,
+            account, container, ..
         } = cfg.clone();
         // TODO: support credentials for private blob storage
         let credentials = StorageCredentials::anonymous();
@@ -67,6 +75,69 @@ impl Indexer {
         Ok(())
     }
 
+    async fn add_stubs_for_missing_blobs(&self, cx: &Context, cfg: ContainerConfig) -> Result<()> {
+        let response = self
+            .client
+            .list_blobs()
+            .max_results(NonZeroU32::new(10 * 1000).unwrap())
+            .into_stream()
+            .next()
+            .await
+            .expect("stream failed")?;
+
+        for blob in response.blobs.blobs() {
+            if !self
+                .cfg
+                .filter
+                .blob_is_match(&blob.name, blob.properties.content_length)
+            {
+                continue;
+            }
+
+            let name = blob.name.clone();
+            let timestamp = blob.properties.last_modified.unix_timestamp();
+            let size = blob.properties.content_length;
+            let url = self.blob_to_route_url(blob);
+
+            if cx.db().routes_for_url(&url)?.is_empty() {
+                let stub = Route::builder(self)
+                    .size(blob.properties.content_length)
+                    .route(url)
+                    .format(BlobFormat::Raw)
+                    .build_stub()?;
+
+                cx.db().insert_stub(&stub)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn blob_to_route_url(&self, blob: &Blob) -> String {
+        format!(
+            "https://{}.blob.core.windows.net/{}/{}",
+            self.cfg.account, self.cfg.container, blob.name
+        )
+    }
+
+    fn route_url_to_name(url: &str) -> Result<String> {
+        // Split by '/' and take everything after the container (4th segment onwards)
+        let parts: Vec<&str> = url.split('/').collect();
+
+        // URL format: https://{account}.blob.core.windows.net/{container}/{name}
+        // parts[0] = "https:"
+        // parts[1] = ""
+        // parts[2] = "{account}.blob.core.windows.net"
+        // parts[3] = "{container}"
+        // parts[4..] = blob name parts
+
+        if parts.len() >= 5 && parts[2].ends_with(".blob.core.windows.net") {
+            Ok(parts[4..].join("/"))
+        } else {
+            Err(anyhow!("Invalid blob route URL"))
+        }
+    }
+
     pub async fn update_blob_index_hashes(
         &self,
         cx: &Context,
@@ -75,7 +146,7 @@ impl Indexer {
         log::debug!("Updating blob index hashes...");
 
         let stubs = cx.db().list_provider_stubs(
-            self.provider_id(),
+            &self.provider_id(),
             OrderBy::Size(Direction::Asc),
             0,
             -1,
@@ -83,8 +154,12 @@ impl Indexer {
 
         for stub in stubs {
             let RouteStub { route, size, .. } = stub;
+            let name = Self::route_url_to_name(&route)?;
 
-            log::trace!("Streaming blob to compute hash: size={size} container={container}");
+            log::trace!(
+                "Streaming blob to compute hash: container={} name={name}",
+                &self.cfg.container
+            );
 
             let hash = {
                 let mut hasher = blake3::Hasher::new();
@@ -94,7 +169,7 @@ impl Indexer {
                 {
                     hasher.update(&[]);
                 } else {
-                    let blob_client = self.client.blob_client(&name);
+                    let blob_client = self.client.blob_client(&route);
                     let mut blob_stream = blob_client.get().into_stream();
 
                     while let Some(chunk_response) = blob_stream.next().await {
@@ -104,13 +179,10 @@ impl Indexer {
                         hasher.update(&chunk);
                     }
                 }
-                hasher.finalize().as_bytes().to_owned()
+                hasher.finalize()
             };
 
-            log::trace!(
-                "Computed hash={hash} for blob: account={account} container={container} name={name}",
-                hash = hex::encode(hash)
-            );
+            log::trace!("Computed hash={hash} for blob: name={name}",);
 
             let cid = blake3_hash_to_cid(hash, Codec::Raw);
 
@@ -211,47 +283,47 @@ impl Indexer {
                 .collect::<Vec<_>>();
 
         // update iroh collection index
-        let wtx = self.db.begin_write()?;
-        {
-            let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
-            let mut collection_hash_table = wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
+        // let wtx = self.db.begin_write()?;
+        // {
+        //     let mut collection_index_table = wtx.open_table(COLLECTION_INDEX_TABLE)?;
+        //     let mut collection_hash_table = wtx.open_multimap_table(COLLECTION_HASH_INDEX_TABLE)?;
 
-            for (path, collection_hash, (timestamp, size)) in &collections_blobs {
-                let account = account.clone();
-                let container = container.clone();
+        for (path, collection_hash, (timestamp, size)) in &collections_blobs {
+            let account = account.clone();
+            let container = container.clone();
 
-                let blob_id = BlobIdTuple::from(BlobId {
-                    account,
-                    container,
-                    name: path.clone(),
-                });
+            let blob_id = BlobIdTuple::from(BlobId {
+                account,
+                container,
+                name: path.clone(),
+            });
 
-                let existing_entry = {
-                    let rtx = self.db.begin_read()?;
-                    let table = rtx.open_table(COLLECTION_INDEX_TABLE)?;
+            let existing_entry = {
+                let rtx = self.db.begin_read()?;
+                let table = rtx.open_table(COLLECTION_INDEX_TABLE)?;
 
-                    table.get(&blob_id)?
-                };
+                table.get(&blob_id)?
+            };
 
-                let now = chrono::Utc::now().timestamp();
+            let now = chrono::Utc::now().timestamp();
 
-                let blob_info = BlobInfoTuple::from(BlobInfo {
-                    timestamp: *timestamp,
-                    size: *size,
-                    hash: Some(*collection_hash),
-                    time_first_indexed: existing_entry
-                        .map(|v| v.value())
-                        .map(BlobInfo::from)
-                        .map(|info| info.time_first_indexed)
-                        .unwrap_or(now),
-                    time_last_checked: now,
-                });
+            let blob_info = BlobInfoTuple::from(BlobInfo {
+                timestamp: *timestamp,
+                size: *size,
+                hash: Some(*collection_hash),
+                time_first_indexed: existing_entry
+                    .map(|v| v.value())
+                    .map(BlobInfo::from)
+                    .map(|info| info.time_first_indexed)
+                    .unwrap_or(now),
+                time_last_checked: now,
+            });
 
-                collection_index_table.insert(&blob_id, blob_info)?;
-                collection_hash_table.insert(collection_hash, blob_id)?;
-            }
+            collection_index_table.insert(&blob_id, blob_info)?;
+            collection_hash_table.insert(collection_hash, blob_id)?;
         }
-        wtx.commit()?;
+        // }
+        // wtx.commit()?;
 
         // // prune any iroh collection paths no longer present in this container
         // let current_collection_paths = collections_blobs
@@ -299,43 +371,6 @@ impl Indexer {
         Ok(())
     }
 
-    async fn add_stubs_for_missing_blobs(&self, cx: &Context, cfg: ContainerConfig) -> Result<()> {
-        let response = self
-            .container_client
-            .list_blobs()
-            .max_results(NonZeroU32::new(10 * 1000).unwrap())
-            .into_stream()
-            .next()
-            .await
-            .expect("stream failed")?;
-
-        for blob in response.blobs.blobs() {
-            let account = account.clone();
-            let container = container.clone();
-            let name = blob.name.clone();
-            let timestamp = blob.properties.last_modified.unix_timestamp();
-            let size = blob.properties.content_length;
-            // TODO(b5) - need to confirm this is correct
-            let url = format!("https://{}/{}", account, container);
-
-            if !filter.blob_is_match(&name, size) {
-                continue;
-            }
-
-            if cx.db().routes_for_url(&url)?.is_empty() {
-                let stub = Route::builder(self)
-                    .size(blob.properties.content_length)
-                    .route(url)
-                    .format(BlobFormat::Raw)
-                    .build_stub()?;
-
-                cx.db().insert_stub(&stub)?;
-            }
-        }
-
-        Ok(())
-    }
-
     async fn calculate_blob_cid(&self, stub: &RouteStub) -> Result<Cid> {
         let size = stub.size;
         let name = stub.route;
@@ -361,11 +396,11 @@ impl Indexer {
                 }
             }
 
-            hasher.finalize().as_bytes().to_owned()
+            hasher.finalize()
         };
 
         log::trace!(
-            "Computed hash={hash} for blob: account={account} container={container} name={name}",
+            "Computed hash={hash} for blob: name={name}",
             hash = hex::encode(hash)
         );
 

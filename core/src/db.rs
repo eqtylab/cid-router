@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use rusqlite::{params, Connection, Result};
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -26,17 +28,8 @@ pub enum OrderBy {
 impl ToString for OrderBy {
     fn to_string(&self) -> String {
         match self {
-            OrderBy::CreatedAt(_) => "created_at".to_string(),
-            OrderBy::Size(_) => "size".to_string(),
-        }
-    }
-}
-
-impl OrderBy {
-    fn direction_string(&self) -> String {
-        match self {
-            OrderBy::CreatedAt(dir) => dir.to_string(),
-            OrderBy::Size(dir) => dir.to_string(),
+            OrderBy::CreatedAt(d) => format!("created_at {}", d.to_string()),
+            OrderBy::Size(d) => format!("size {}", d.to_string()),
         }
     }
 }
@@ -47,7 +40,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub fn new(db_path: &str) -> Result<Self> {
+    pub fn open_or_create(db_path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         let db = Db { conn };
         db.create_tables()?;
@@ -141,19 +134,13 @@ impl Db {
              FROM routes
              WHERE cid is not null
              AND provider_id = ?1
-             ORDER BY ?2 ?3
-             LIMIT ?4 OFFSET ?5
+             ORDER BY ?2
+             LIMIT ?3 OFFSET ?4
              ",
         )?;
 
         let route_iter = stmt.query_map(
-            params![
-                provider_id,
-                order_by.column_name(),
-                order_by.direction_string(),
-                limit,
-                offset
-            ],
+            params![provider_id, order_by.to_string(), limit, offset],
             Route::from_sql_row,
         )?;
 
@@ -200,17 +187,12 @@ impl Db {
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid IS NOT NULL
-             ORDER BY ?1 ?2
-             LIMIT ?3 OFFSET ?4",
+             ORDER BY ?1
+             LIMIT ?2 OFFSET ?3",
         )?;
 
         let route_iter = stmt.query_map(
-            params![
-                order_by.to_string(),
-                order_by.direction_string(),
-                limit,
-                offset
-            ],
+            params![order_by.to_string(), limit, offset],
             Route::from_sql_row,
         )?;
 
@@ -226,25 +208,19 @@ impl Db {
         &self,
         provider_id: &str,
         order_by: OrderBy,
-        offset: u64,
-        limit: u64,
+        offset: i64,
+        limit: i64,
     ) -> Result<Vec<RouteStub>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE provider_id = ?1
-             ORDER BY ?2 ?3
-             LIMIT ?4 OFFSET ?5",
+             ORDER BY ?2
+             LIMIT ?3 OFFSET ?4",
         )?;
 
         let route_iter = stmt.query_map(
-            params![
-                provider_id,
-                order_by.to_string(),
-                order_by.direction_string(),
-                limit,
-                offset
-            ],
+            params![provider_id, order_by.to_string(), limit, offset],
             RouteStub::from_sql_row,
         )?;
 
@@ -272,11 +248,11 @@ impl Db {
             stub.provider_id,
             stub.provider_type.to_string(),
             stub.route,
-            None::<Vec<u8>>, // cid
-            None::<i64>,     // size
-            None::<String>,  // blob_format
-            None::<Vec<u8>>, // creator
-            None::<Vec<u8>>, // signature
+            None::<Vec<u8>>,                                   // cid
+            stub.size,                                         // size
+            stub.blob_format.map(|format| format.to_string()), // blob_format
+            None::<Vec<u8>>,                                   // creator
+            None::<Vec<u8>>,                                   // signature
         ])?;
 
         Ok(())
@@ -332,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_route_persistence() {
-        let ctx = Context::new().unwrap();
+        let ctx = Context::mem().unwrap();
         let db = Db::new_in_memory().unwrap();
         let provider = StubAzureProvider {};
 
@@ -363,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_stubs() {
-        let ctx = Context::new().unwrap();
+        let ctx = Context::mem().unwrap();
         let db = Db::new_in_memory().unwrap();
         let provider = StubAzureProvider {};
 
@@ -371,6 +347,17 @@ mod tests {
             .route("/test/route".to_string())
             .build_stub()
             .unwrap();
+
+        // sanity check
+        let routes = db
+            .list_provider_routes(
+                &provider.provider_id(),
+                OrderBy::CreatedAt(Direction::Desc),
+                0,
+                -1,
+            )
+            .unwrap();
+        assert_eq!(routes.len(), 0);
 
         db.insert_stub(&stub).unwrap();
 

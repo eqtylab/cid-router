@@ -304,6 +304,7 @@ name = "azure"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "azure_storage",
  "azure_storage_blobs",
  "blake3",
@@ -315,6 +316,7 @@ dependencies = [
  "iroh-blobs",
  "log",
  "serde",
+ "serde_json",
  "time",
  "toml",
 ]
