@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
+use cid_router_core::repo::Repo;
 use cid_router_server::{api, cli, config::Config, context::Context};
 use clap::Parser;
 use log::info;
@@ -20,13 +21,19 @@ async fn main() -> Result<()> {
 }
 
 async fn start(args: cli::Start) -> Result<()> {
-    let config = Config::from_file(args.config)?;
+    let repo_path = args
+        .repo_path
+        .or(Some(cid_router_core::repo::Repo::default_location()))
+        .unwrap();
+    let repo = Repo::open_or_create(repo_path.clone()).await?;
+
+    let config = Config::from_file(repo_path.join("server.toml"))?;
 
     env_logger::init();
 
     info!("Starting: {config:#?}");
 
-    let ctx = Context::init_from_config(config).await?;
+    let ctx = Context::init_from_repo(repo, config).await?;
 
     api::start(Arc::new(ctx)).await?;
 

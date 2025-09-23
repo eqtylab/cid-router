@@ -23,7 +23,7 @@ struct Inner {
 
 impl Context {
     pub async fn from_repo(repo: Repo) -> Result<Self> {
-        let db = repo.db()?;
+        let db = repo.db().await?;
         let key = repo.secret_key().await?;
         let secrets = HashMap::new();
 
@@ -38,8 +38,8 @@ impl Context {
         })
     }
 
-    pub fn mem() -> Result<Self> {
-        let db = Db::new_in_memory()?;
+    pub async fn mem() -> Result<Self> {
+        let db = Db::new_in_memory().await?;
         let key = SecretKey::generate(rand::rngs::OsRng);
         let secrets = HashMap::new();
         let inner = Inner {

@@ -21,9 +21,9 @@ pub enum Subcommand {
 /// Start service
 #[derive(Debug, Clone, Parser)]
 pub struct Start {
-    /// Config file to use
+    /// Repo Path to use to use
     #[clap(short, long)]
-    pub config: PathBuf,
+    pub repo_path: Option<PathBuf>,
 }
 
 /// Generate OpenAPI json documents

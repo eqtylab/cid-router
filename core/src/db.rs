@@ -1,7 +1,10 @@
 use std::path::Path;
+use std::sync::Arc;
 
+use cid::Cid;
 use rusqlite::{params, Connection, Result};
 use time::format_description::well_known::Rfc3339;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::routes::{Route, RouteStub};
@@ -36,27 +39,32 @@ impl ToString for OrderBy {
 
 #[derive(Debug)]
 pub struct Db {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl Db {
-    pub fn open_or_create(db_path: impl AsRef<Path>) -> Result<Self> {
+    pub async fn open_or_create(db_path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(db_path)?;
-        let db = Db { conn };
-        db.create_tables()?;
+        let db = Db {
+            conn: Arc::new(Mutex::new(conn)),
+        };
+        db.create_tables().await?;
         Ok(db)
     }
 
-    pub fn new_in_memory() -> Result<Self> {
+    pub async fn new_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
-        let db = Db { conn };
-        db.create_tables()?;
+        let db = Db {
+            conn: Arc::new(Mutex::new(conn)),
+        };
+        db.create_tables().await?;
         Ok(db)
     }
 
-    fn create_tables(&self) -> Result<()> {
+    async fn create_tables(&self) -> Result<()> {
+        let conn = self.conn.lock().await;
         // Route table - you can add unique constraints as needed
-        self.conn.execute(
+        conn.execute(
             "CREATE TABLE IF NOT EXISTS routes (
                 id TEXT PRIMARY KEY NOT NULL,
                 created_at TEXT NOT NULL,
@@ -78,8 +86,10 @@ impl Db {
     }
 
     // Route operations
-    pub fn insert_route(&self, route: &Route) -> Result<()> {
-        let mut stmt = self.conn.prepare(
+    pub async fn insert_route(&self, route: &Route) -> Result<()> {
+        let conn = self.conn.lock().await;
+
+        let mut stmt = conn.prepare(
             "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
         )?;
@@ -105,8 +115,9 @@ impl Db {
         Ok(())
     }
 
-    pub fn list_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn list_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid is not null
@@ -122,14 +133,15 @@ impl Db {
         Ok(routes)
     }
 
-    pub fn list_provider_routes(
+    pub async fn list_provider_routes(
         &self,
         provider_id: &str,
         order_by: OrderBy,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Route>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid is not null
@@ -149,8 +161,9 @@ impl Db {
         Ok(routes)
     }
 
-    pub fn get_route(&self, id: Uuid) -> Result<Option<Route>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn get_route(&self, id: Uuid) -> Result<Option<Route>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes WHERE id = ?1 AND cid is not null",
         )?;
@@ -164,8 +177,28 @@ impl Db {
         }
     }
 
-    pub fn routes_for_url(&self, url: &str) -> Result<Vec<Route>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn routes_for_cid(&self, cid: Cid) -> Result<Vec<Route>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
+            "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
+             FROM routes
+             WHERE cid = ?1
+             AND cid IS NOT NULL
+             LIMIT 1",
+        )?;
+
+        let route_iter = stmt.query_map(params![cid.to_string()], Route::from_sql_row)?;
+
+        let mut routes = Vec::new();
+        for route in route_iter {
+            routes.push(route?);
+        }
+        Ok(routes)
+    }
+
+    pub async fn routes_for_url(&self, url: &str) -> Result<Vec<Route>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE route = ?1
@@ -182,8 +215,14 @@ impl Db {
         Ok(routes)
     }
 
-    pub fn all_routes(&self, order_by: OrderBy, offset: i64, limit: i64) -> Result<Vec<Route>> {
-        let mut stmt = self.conn.prepare(
+    pub async fn all_routes(
+        &self,
+        order_by: OrderBy,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Route>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid IS NOT NULL
@@ -204,14 +243,15 @@ impl Db {
     }
 
     /// list stubs for a given provider
-    pub fn list_provider_stubs(
+    pub async fn list_provider_stubs(
         &self,
         provider_id: &str,
         order_by: OrderBy,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<RouteStub>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE provider_id = ?1
@@ -231,8 +271,9 @@ impl Db {
         Ok(stubs)
     }
 
-    pub fn insert_stub(&self, stub: &RouteStub) -> Result<()> {
-        let mut stmt = self.conn.prepare(
+    pub async fn insert_stub(&self, stub: &RouteStub) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )?;
@@ -258,8 +299,9 @@ impl Db {
         Ok(())
     }
 
-    pub fn complete_stub(&self, route: &Route) -> Result<()> {
-        let mut stmt = self.conn.prepare(
+    pub async fn complete_stub(&self, route: &Route) -> Result<()> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(
             "UPDATE routes
                 SET verified_at = ?2, provider_id = ?3, provider_type = ?4, route = ?5,
                 cid = ?6, size = ?7, blob_format = ?8, creator = ?9, signature = ?10
@@ -306,10 +348,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_route_persistence() {
-        let ctx = Context::mem().unwrap();
-        let db = Db::new_in_memory().unwrap();
+    #[tokio::test]
+    async fn test_route_persistence() {
+        let ctx = Context::mem().await.unwrap();
+        let db = Db::new_in_memory().await.unwrap();
         let provider = StubAzureProvider {};
 
         // Test Route
@@ -324,23 +366,23 @@ mod tests {
             .build(&ctx)
             .unwrap();
 
-        db.insert_route(&route).unwrap();
+        db.insert_route(&route).await.unwrap();
 
-        let routes = db.list_routes(0, 10000).unwrap();
+        let routes = db.list_routes(0, 10000).await.unwrap();
         assert_eq!(routes.len(), 1);
 
-        let retrieved_route = db.get_route(route.id).unwrap().unwrap();
+        let retrieved_route = db.get_route(route.id).await.unwrap().unwrap();
         assert_eq!(retrieved_route.cid, route.cid);
 
-        let retrieved_routes = db.routes_for_url(&route.route).unwrap();
+        let retrieved_routes = db.routes_for_url(&route.route).await.unwrap();
         assert_eq!(retrieved_routes.len(), 1);
         assert_eq!(retrieved_routes[0].cid, route.cid);
     }
 
-    #[test]
-    fn test_stubs() {
-        let ctx = Context::mem().unwrap();
-        let db = Db::new_in_memory().unwrap();
+    #[tokio::test]
+    async fn test_stubs() {
+        let ctx = Context::mem().await.unwrap();
+        let db = Db::new_in_memory().await.unwrap();
         let provider = StubAzureProvider {};
 
         let stub = Route::builder(&provider)
@@ -356,12 +398,13 @@ mod tests {
                 0,
                 -1,
             )
+            .await
             .unwrap();
         assert_eq!(routes.len(), 0);
 
-        db.insert_stub(&stub).unwrap();
+        db.insert_stub(&stub).await.unwrap();
 
-        let retrieved_routes = db.routes_for_url(&stub.route).unwrap();
+        let retrieved_routes = db.routes_for_url(&stub.route).await.unwrap();
         assert_eq!(retrieved_routes.len(), 0);
 
         let stubs = db
@@ -371,6 +414,7 @@ mod tests {
                 0,
                 10000,
             )
+            .await
             .unwrap();
         assert_eq!(stubs.len(), 1);
 
@@ -387,14 +431,15 @@ mod tests {
             .build(&ctx)
             .unwrap();
 
-        db.complete_stub(&route).unwrap();
+        db.complete_stub(&route).await.unwrap();
 
         let retrieved_routes = db
             .all_routes(OrderBy::CreatedAt(Direction::Asc), 0, 10000)
+            .await
             .unwrap();
         assert_eq!(retrieved_routes.len(), 1);
 
-        let retrieved_routes = db.routes_for_url(&route.route).unwrap();
+        let retrieved_routes = db.routes_for_url(&route.route).await.unwrap();
         assert_eq!(retrieved_routes.len(), 1);
         assert_eq!(retrieved_routes[0].cid, route.cid);
     }

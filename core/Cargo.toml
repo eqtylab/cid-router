@@ -16,6 +16,7 @@ bytes.workspace = true
 chrono.workspace = true
 cid.workspace = true
 clap.workspace = true
+dirs-next.workspace = true
 env_logger.workspace = true
 futures.workspace = true
 iroh.workspace = true

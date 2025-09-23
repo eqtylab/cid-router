@@ -8,15 +8,10 @@ use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
     context::Context,
     crp::{BytesResolver, Crp, CrpCapabilities, Provider, ProviderType, RoutesIndexer},
-    routes::Route,
 };
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};
-use iroh_blobs::{
-    get::request::{get_verified_size, GetBlobItem},
-    ticket::BlobTicket,
-    BlobFormat, Hash,
-};
+use iroh_blobs::{get::request::GetBlobItem, ticket::BlobTicket, Hash};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

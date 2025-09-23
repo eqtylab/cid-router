@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use cid_router_core::{crp::Crp, repo::Repo};
@@ -15,10 +15,9 @@ pub struct Context {
 }
 
 impl Context {
-    pub async fn init_from_config(path: PathBuf, config: Config) -> Result<Self> {
+    pub async fn init_from_repo(repo: Repo, config: Config) -> Result<Self> {
         let start_time = chrono::Utc::now().timestamp();
         let port = config.port;
-        let repo = Repo::open_or_create(path).await?;
         let core = cid_router_core::context::Context::from_repo(repo).await?;
 
         let providers = future::join_all(config.providers.into_iter().map(

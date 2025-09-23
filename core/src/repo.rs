@@ -16,6 +16,10 @@ impl Repo {
     const KEY_FILE: &str = "key";
     const CONFIG_FILE: &str = "config.toml";
 
+    pub fn default_location() -> PathBuf {
+        dirs_next::data_local_dir().unwrap().join("cid-router")
+    }
+
     /// Opens or creates a repo at the given base directory.
     pub async fn open_or_create(base_dir: impl Into<PathBuf>) -> Result<Self> {
         let this = Self(base_dir.into());
@@ -35,9 +39,11 @@ impl Repo {
         Ok(key)
     }
 
-    pub fn db(&self) -> Result<Db> {
+    pub async fn db(&self) -> Result<Db> {
         let db_file_path = self.0.join(Self::DB_FILE);
-        Db::open_or_create(db_file_path).context("opening database")
+        Db::open_or_create(db_file_path)
+            .await
+            .context("opening database")
     }
 
     /// reads the config file as a string
