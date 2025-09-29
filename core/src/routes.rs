@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     context::Signer,
-    crp::{Provider, ProviderType},
+    crp::{Crp, ProviderType},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -29,7 +29,7 @@ pub struct Route {
 }
 
 impl Route {
-    pub fn builder(provider: &impl Provider) -> RouteBuilder {
+    pub fn builder(provider: &impl Crp) -> RouteBuilder {
         RouteBuilder::new(provider)
     }
 
@@ -68,6 +68,7 @@ impl Route {
     }
 }
 
+/// state machine for building either a route or a stub
 pub struct RouteBuilder {
     id: Uuid,
     provider_id: String,
@@ -78,8 +79,8 @@ pub struct RouteBuilder {
     blob_format: Option<BlobFormat>,
 }
 
-impl<'a> RouteBuilder {
-    fn new(provider: &impl Provider) -> Self {
+impl RouteBuilder {
+    fn new(provider: &impl Crp) -> Self {
         Self {
             id: Uuid::new_v4(),
             provider_id: provider.provider_id(),

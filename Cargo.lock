@@ -300,28 +300,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "azure"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "azure_storage",
- "azure_storage_blobs",
- "blake3",
- "cid",
- "cid-router-core",
- "crp-iroh",
- "futures",
- "hex",
- "iroh-blobs",
- "log",
- "serde",
- "serde_json",
- "time",
- "toml",
-]
-
-[[package]]
 name = "azure_core"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -688,6 +666,7 @@ dependencies = [
  "cid",
  "cid-router-core",
  "clap",
+ "crp-azure",
  "crp-iroh",
  "env_logger",
  "futures",
@@ -925,6 +904,30 @@ name = "crossbeam-utils"
 version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
+
+[[package]]
+name = "crp-azure"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "azure_storage",
+ "azure_storage_blobs",
+ "blake3",
+ "bytes",
+ "cid",
+ "cid-router-core",
+ "crp-iroh",
+ "futures",
+ "hex",
+ "iroh-blobs",
+ "log",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "toml",
+]
 
 [[package]]
 name = "crp-iroh"

@@ -1,16 +1,11 @@
-use std::{fs, path::PathBuf};
-
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    pub port: u16,
-    pub blob_storage: BlobStorageConfig,
+pub struct ContainerConfig {
+    pub account: String,
+    pub container: String,
+    pub filter: ContainerBlobFilter,
     pub indexing_strategy: IndexingStrategy,
-    pub db_file: PathBuf,
-    pub log_level_default: Option<String>,
-    pub log_level_app: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,18 +13,6 @@ pub struct Config {
 pub enum IndexingStrategy {
     /// Update the index every `x` seconds
     PollInterval(u64),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlobStorageConfig {
-    pub containers: Vec<ContainerConfig>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ContainerConfig {
-    pub account: String,
-    pub container: String,
-    pub filter: ContainerBlobFilter,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,13 +45,5 @@ impl ContainerBlobFilter {
             Self::Or(fs) => fs.iter().any(|f| f.blob_is_match(name, size)),
             Self::Not(f) => !f.blob_is_match(name, size),
         }
-    }
-}
-
-impl Config {
-    pub fn from_file(path: PathBuf) -> Result<Self> {
-        let config = toml::from_str(&fs::read_to_string(path)?)?;
-
-        Ok(config)
     }
 }

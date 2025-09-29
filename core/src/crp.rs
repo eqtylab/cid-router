@@ -6,7 +6,7 @@ use cid::Cid;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::{cid_filter::CidFilter, Context};
+use crate::{cid_filter::CidFilter, routes::Route, Context};
 
 /// Set of all supported CID Route Providers (CRPs) throughout the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
@@ -32,14 +32,13 @@ impl ProviderType {
     }
 }
 
-pub trait Provider {
-    fn provider_id(&self) -> String;
-    fn provider_type(&self) -> ProviderType;
-}
-
 /// CID Route Provider (CRP) Trait
 #[async_trait]
-pub trait Crp {
+pub trait Crp: Send + Sync {
+    fn provider_id(&self) -> String;
+    fn provider_type(&self) -> ProviderType;
+    async fn reindex(&self, cx: &Context) -> Result<()>;
+
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a>;
 
     fn cid_filter(&self) -> CidFilter;
@@ -51,16 +50,8 @@ pub trait Crp {
 
 /// All capabilities a CRP may have represented as self-referential trait objects.
 pub struct CrpCapabilities<'a> {
-    pub routes_indexer: Option<&'a dyn RoutesIndexer>,
     pub bytes_resolver: Option<&'a dyn BytesResolver>,
     pub size_resolver: Option<&'a dyn SizeResolver>,
-}
-
-/// An Indexer is capable of updating the sqlite database of routes held by core,
-/// building & updating an index of routes available from the provider
-#[async_trait]
-pub trait RoutesIndexer {
-    async fn reindex(&self, cx: &Context) -> Result<()>;
 }
 
 // /// A RoutesResolver can provide routes for a given CID.
@@ -75,7 +66,7 @@ pub trait RoutesIndexer {
 pub trait BytesResolver {
     async fn get_bytes(
         &self,
-        cid: &Cid,
+        route: &Route,
         auth: Vec<u8>,
     ) -> Result<
         Pin<

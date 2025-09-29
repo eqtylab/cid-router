@@ -4,7 +4,7 @@ use anyhow::Result;
 use cid_router_core::repo::Repo;
 use cid_router_server::{api, cli, config::Config, context::Context};
 use clap::Parser;
-use log::info;
+use log::{info, warn};
 use serde_json::Value;
 use utoipa::openapi::{Info, OpenApi, Paths};
 
@@ -27,7 +27,15 @@ async fn start(args: cli::Start) -> Result<()> {
         .unwrap();
     let repo = Repo::open_or_create(repo_path.clone()).await?;
 
-    let config = Config::from_file(repo_path.join("server.toml"))?;
+    let server_config_path = repo_path.join("server.toml");
+    let config = match server_config_path.exists() {
+        true => Config::from_file(server_config_path)?,
+        false => {
+            warn!("config file does not exist. creating new config");
+            tokio::fs::create_dir_all(&repo_path).await?;
+            Config::default().write(server_config_path).await?
+        }
+    };
 
     env_logger::init();
 

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use cid_router_core::{crp::Crp, repo::Repo};
+use cid_router_core::{crp::Crp, indexer::Indexer, repo::Repo};
+use crp_azure::Container as AzureContainer;
 use crp_iroh::IrohCrp;
 use futures::future;
 
@@ -11,7 +12,7 @@ pub struct Context {
     pub start_time: i64,
     pub port: u16,
     pub core: cid_router_core::context::Context,
-    pub providers: Vec<Arc<dyn Crp + Send + Sync>>,
+    pub providers: Vec<Arc<dyn Crp>>,
 }
 
 impl Context {
@@ -25,14 +26,18 @@ impl Context {
                 match provider_config {
                     ProviderConfig::Iroh(iroh_config) => Ok(Arc::new(
                         IrohCrp::new_from_config(serde_json::to_value(iroh_config)?).await?,
-                    )
-                        as Arc<dyn Crp + Send + Sync>),
+                    ) as Arc<dyn Crp>),
+                    ProviderConfig::Azure(azure_config) => {
+                        Ok(Arc::new(AzureContainer::new(azure_config)) as Arc<dyn Crp>)
+                    }
                 }
             },
         ))
         .await
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
+
+        let _indexer = Indexer::spawn(3600, core.clone(), providers.clone()).await;
 
         Ok(Self {
             start_time,

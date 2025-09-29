@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use iroh::SecretKey;
+use log::warn;
 
 use crate::db::Db;
 
@@ -25,6 +26,7 @@ impl Repo {
         let this = Self(base_dir.into());
 
         if !this.0.join(Self::KEY_FILE).exists() {
+            warn!("secret key does not exist. creating new key");
             tokio::fs::create_dir_all(&this.0).await?;
             this.create_key().await?;
         };

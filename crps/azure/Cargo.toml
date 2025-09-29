@@ -1,5 +1,5 @@
 [package]
-name = "azure"
+name = "crp-azure"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,6 +12,7 @@ async-trait.workspace = true
 azure_storage.workspace = true
 azure_storage_blobs.workspace = true
 blake3.workspace = true
+bytes.workspace = true
 cid.workspace = true
 futures.workspace = true
 hex.workspace = true
@@ -21,3 +22,4 @@ serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 toml.workspace = true
+tokio.workspace = true

@@ -3,6 +3,7 @@ pub mod cid_filter;
 pub mod context;
 pub mod crp;
 pub mod db;
+pub mod indexer;
 pub mod repo;
 pub mod routes;
 

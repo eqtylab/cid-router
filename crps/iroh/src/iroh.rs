@@ -3,11 +3,11 @@ use std::{pin::Pin, str::FromStr};
 use anyhow::Result;
 use async_trait::async_trait;
 use bao_tree::io::BaoContentItem;
-use cid::Cid;
 use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
-    context::Context,
-    crp::{BytesResolver, Crp, CrpCapabilities, Provider, ProviderType, RoutesIndexer},
+    crp::{BytesResolver, Crp, CrpCapabilities, ProviderType},
+    routes::Route,
+    Context,
 };
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};
@@ -62,7 +62,8 @@ impl IrohCrp {
     }
 }
 
-impl Provider for IrohCrp {
+#[async_trait]
+impl Crp for IrohCrp {
     fn provider_id(&self) -> String {
         "iroh".to_string()
     }
@@ -70,13 +71,14 @@ impl Provider for IrohCrp {
     fn provider_type(&self) -> ProviderType {
         ProviderType::Iroh
     }
-}
 
-#[async_trait]
-impl Crp for IrohCrp {
+    async fn reindex(&self, _cx: &Context) -> anyhow::Result<()> {
+        // TODO: Implement reindexing logic
+        todo!();
+    }
+
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
-            routes_indexer: Some(self),
             bytes_resolver: Some(self),
             size_resolver: None, // TODO
         }
@@ -84,13 +86,6 @@ impl Crp for IrohCrp {
 
     fn cid_filter(&self) -> CidFilter {
         CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x1e)) // blake3
-    }
-}
-
-#[async_trait]
-impl RoutesIndexer for IrohCrp {
-    async fn reindex(&self, _cx: &Context) -> Result<()> {
-        todo!();
     }
 }
 
@@ -133,7 +128,7 @@ impl RoutesIndexer for IrohCrp {
 impl BytesResolver for IrohCrp {
     async fn get_bytes(
         &self,
-        cid: &Cid,
+        route: &Route,
         _auth: Vec<u8>,
     ) -> Result<
         Pin<
@@ -145,6 +140,7 @@ impl BytesResolver for IrohCrp {
         Box<dyn std::error::Error + Send + Sync>,
     > {
         let Self { node_addr, .. } = self;
+        let cid = route.cid;
 
         let hash = cid.hash().digest();
         let hash: [u8; 32] = hash.try_into()?;

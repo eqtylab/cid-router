@@ -1,45 +1,79 @@
 use std::num::NonZeroU32;
+use std::pin::Pin;
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use azure_storage::prelude::*;
 use azure_storage_blobs::{blob::Blob, prelude::*};
 use cid::Cid;
-use futures::StreamExt;
-use iroh_blobs::{BlobFormat, Hash, format::collection::Collection};
+use futures::{Stream, StreamExt};
+use iroh_blobs::BlobFormat;
 
 use cid_router_core::{
     Context,
     cid::{Codec, blake3_hash_to_cid},
-    crp::{Provider, ProviderType, RoutesIndexer},
+    cid_filter::CidFilter,
+    crp::{BytesResolver, Crp, CrpCapabilities, ProviderType},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
 
-use crate::config::{BlobStorageConfig, ContainerConfig};
+use crate::config::ContainerConfig;
 
 /// An indexer can perform route indexing operations, scoped to a single azure
 /// blob container.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Container {
     cfg: ContainerConfig,
     client: ContainerClient,
 }
 
-impl Provider for Container {
+#[async_trait]
+impl Crp for Container {
     fn provider_id(&self) -> String {
         self.cfg.container.clone()
     }
     fn provider_type(&self) -> ProviderType {
         ProviderType::Azure
     }
+
+    async fn reindex(&self, cx: &Context) -> anyhow::Result<()> {
+        self.add_stubs_for_missing_blobs(cx).await?;
+        self.update_blob_index_hashes(cx).await?;
+        // TODO(b5): implement & call self.prune_entries here
+        Ok(())
+    }
+
+    fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
+        CrpCapabilities {
+            bytes_resolver: Some(self),
+            size_resolver: None, // TODO
+        }
+    }
+
+    fn cid_filter(&self) -> cid_router_core::cid_filter::CidFilter {
+        CidFilter::None
+    }
 }
 
 #[async_trait]
-impl RoutesIndexer for Container {
-    async fn reindex(&self, _cx: &Context) -> Result<()> {
-        // self.add_stubs_for_missing_blobs(cx, cfg)
-        todo!()
+impl BytesResolver for Container {
+    async fn get_bytes(
+        &self,
+        route: &Route,
+        _auth: Vec<u8>, // TODO - support user-provided authentication
+    ) -> Result<
+        Pin<
+            Box<
+                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
+                    + Send,
+            >,
+        >,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        let blob_name = Self::route_url_to_name(&route.route)?;
+        let _client = self.client.blob_client(blob_name);
+        todo!();
     }
 }
 
@@ -52,30 +86,31 @@ impl Container {
         let credentials = StorageCredentials::anonymous();
         let client = BlobServiceClient::new(account, credentials);
         let client = client.container_client(container);
+
         Self { cfg, client }
     }
 
-    pub async fn update_blob_index(
-        &self,
-        cx: &Context,
-        blob_storage_config: &BlobStorageConfig,
-    ) -> Result<()> {
-        log::debug!("Updating blob index...");
+    // pub async fn update_blob_index(
+    //     &self,
+    //     cx: &Context,
+    //     blob_storage_config: &BlobStorageConfig,
+    // ) -> Result<()> {
+    //     log::debug!("Updating blob index...");
 
-        for container_cfg in &blob_storage_config.containers {
-            self.add_stubs_for_missing_blobs(cx, container_cfg.clone())
-                .await?;
+    //     for container_cfg in &blob_storage_config.containers {
+    //         self.add_stubs_for_missing_blobs(cx, container_cfg.clone())
+    //             .await?;
 
-            // self.prune_index_entries_for_deleted_or_filtered_blobs(account, container, filter)
-            //     .await?;
-        }
+    //         // self.prune_index_entries_for_deleted_or_filtered_blobs(account, container, filter)
+    //         //     .await?;
+    //     }
 
-        log::debug!("Finished updating blob index.");
+    //     log::debug!("Finished updating blob index.");
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    async fn add_stubs_for_missing_blobs(&self, cx: &Context, cfg: ContainerConfig) -> Result<()> {
+    async fn add_stubs_for_missing_blobs(&self, cx: &Context) -> Result<()> {
         let response = self
             .client
             .list_blobs()
@@ -94,9 +129,9 @@ impl Container {
                 continue;
             }
 
-            let name = blob.name.clone();
-            let timestamp = blob.properties.last_modified.unix_timestamp();
-            let size = blob.properties.content_length;
+            // let name = blob.name.clone();
+            // let timestamp = blob.properties.last_modified.unix_timestamp();
+            // let size = blob.properties.content_length;
             let url = self.blob_to_route_url(blob);
 
             if cx.db().routes_for_url(&url).await?.is_empty() {
@@ -184,8 +219,6 @@ impl Container {
             let completed_route = builder.cid(cid).build(cx)?;
 
             cx.db().complete_stub(&completed_route).await?;
-
-            // self.update_blob_index_entry(blob_id, new_blob_info, Some(blob_info))?;
         }
 
         log::debug!("Finished updating blob index hashes.");

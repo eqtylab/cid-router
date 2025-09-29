@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 api-utils = { path = "../crates/api-utils" }
 cid-router-core = { path = "../core" }
+crp-azure = { path = "../crps/azure" }
 crp-iroh = { path = "../crps/iroh" }
 
 anyhow = { workspace = true }
