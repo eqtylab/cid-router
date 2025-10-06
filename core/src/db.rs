@@ -1,17 +1,31 @@
-use std::path::Path;
 use std::sync::Arc;
+use std::{path::Path, str::FromStr};
 
 use cid::Cid;
 use rusqlite::{params, Connection, Result};
+use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::routes::{Route, RouteStub};
 
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Direction {
     Asc,
     Desc,
+}
+
+impl FromStr for Direction {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ASC" => Ok(Direction::Asc),
+            "DESC" => Ok(Direction::Desc),
+            _ => Err(format!("Invalid direction: {}", s)),
+        }
+    }
 }
 
 impl ToString for Direction {
@@ -77,7 +91,8 @@ impl Db {
                 creator BLOB,
                 signature BLOB,
                 blob_format TEXT,
-                UNIQUE(provider_id, provider_type, cid)
+                UNIQUE(provider_id, provider_type, cid),
+                UNIQUE(provider_id, provider_type, route)
             )",
             [],
         )?;
@@ -115,18 +130,26 @@ impl Db {
         Ok(())
     }
 
-    pub async fn list_routes(&self, offset: i64, limit: i64) -> Result<Vec<Route>> {
+    pub async fn list_routes(
+        &self,
+        order_by: OrderBy,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
             "SELECT id, created_at, verified_at, provider_id, provider_type, route, cid, size, blob_format, creator, signature
              FROM routes
              WHERE cid is not null
-             ORDER BY created_at DESC
-             LIMIT ?1 OFFSET ?2
+             ORDER BY ?1 DESC
+             LIMIT ?2 OFFSET ?3
              ",
         )?;
 
-        let route_iter = stmt.query_map(params![limit, offset], Route::from_sql_row)?;
+        let route_iter = stmt.query_map(
+            params![order_by.to_string(), limit, offset],
+            Route::from_sql_row,
+        )?;
 
         let routes = route_iter.collect::<Result<Vec<Route>>>()?;
 
@@ -187,7 +210,7 @@ impl Db {
              LIMIT 1",
         )?;
 
-        let route_iter = stmt.query_map(params![cid.to_string()], Route::from_sql_row)?;
+        let route_iter = stmt.query_map(params![cid.to_bytes()], Route::from_sql_row)?;
 
         let mut routes = Vec::new();
         for route in route_iter {

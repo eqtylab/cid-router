@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use iroh::SecretKey;
-use log::warn;
+use log::{info, warn};
 
 use crate::db::Db;
 
@@ -23,7 +23,10 @@ impl Repo {
 
     /// Opens or creates a repo at the given base directory.
     pub async fn open_or_create(base_dir: impl Into<PathBuf>) -> Result<Self> {
-        let this = Self(base_dir.into());
+        let base_dir = base_dir.into();
+        info!("opening repo at {}", base_dir.display());
+
+        let this = Self(base_dir);
 
         if !this.0.join(Self::KEY_FILE).exists() {
             warn!("secret key does not exist. creating new key");

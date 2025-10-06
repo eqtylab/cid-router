@@ -3,7 +3,7 @@ use std::{str::FromStr, sync::Arc};
 use api_utils::ApiResult;
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{header, StatusCode},
     response::Response,
     Json,
@@ -11,12 +11,14 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::Bytes;
 use cid::Cid;
+use cid_router_core::db::{Direction, OrderBy};
 use futures::StreamExt;
 use headers::Authorization;
 use http_body::Frame;
 use http_body_util::StreamBody;
-use serde::Serialize;
-use utoipa::ToSchema;
+use log::info;
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::context::Context;
 
@@ -31,6 +33,7 @@ pub struct Route {
     pub r#type: String,
     pub size: u64,
     pub url: String,
+    pub cid: String,
 }
 
 impl From<cid_router_core::routes::Route> for Route {
@@ -40,6 +43,7 @@ impl From<cid_router_core::routes::Route> for Route {
             provider_id,
             size,
             route,
+            cid,
             ..
         } = route;
 
@@ -48,8 +52,46 @@ impl From<cid_router_core::routes::Route> for Route {
             r#type: provider_type.to_string(),
             size,
             url: route,
+            cid: cid.to_string(),
         }
     }
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ListRoutesQuery {
+    direction: Option<String>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+}
+// List routes
+#[utoipa::path(
+    get,
+    path = "/v1/routes",
+    tag = "/v1/routes",
+    params(
+        ListRoutesQuery,
+    ),
+    responses(
+        (status = 200, description = "List routes", body = Vec<Route>)
+    )
+)]
+pub async fn list_routes(
+    State(ctx): State<Arc<Context>>,
+    query: Query<ListRoutesQuery>,
+) -> ApiResult<Json<Vec<Route>>> {
+    let direction = query.0.direction.unwrap_or_else(|| "DESC".to_string());
+    let offset = query.0.offset.unwrap_or(0);
+    let limit = query.0.limit.unwrap_or(100);
+    let direction = Direction::from_str(&direction).unwrap();
+
+    let routes = ctx
+        .core
+        .db()
+        .list_routes(OrderBy::CreatedAt(direction), offset, limit)
+        .await?;
+    let routes = routes.into_iter().map(Route::from).collect();
+
+    Ok(Json(routes))
 }
 
 /// Get routes for a CID
@@ -66,6 +108,7 @@ pub async fn get_routes(
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Json<RoutesResponse>> {
     let cid = Cid::from_str(&cid)?;
+    info!("finding routes for cid: {cid}");
     let routes = ctx.core.db().routes_for_cid(cid).await?;
     let routes = routes.into_iter().map(Route::from).collect();
 
@@ -78,7 +121,7 @@ pub async fn get_routes(
     path = "/v1/data/{cid}",
     tag = "/v1/data/{cid}",
     params(
-        ("authorization" = String, Header, description = "Bearer token for authentication")
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
     ),
     responses(
         (status = 200, description = "Get data for a CID", body = RoutesResponse)

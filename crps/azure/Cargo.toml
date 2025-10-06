@@ -9,6 +9,8 @@ crp-iroh = { path = "../iroh" }
 
 anyhow.workspace = true
 async-trait.workspace = true
+azure_core.workspace = true
+azure_identity.workspace = true
 azure_storage.workspace = true
 azure_storage_blobs.workspace = true
 blake3.workspace = true

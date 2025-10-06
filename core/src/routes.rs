@@ -204,6 +204,9 @@ impl RouteStub {
         // TODO(b5) - remove unwraps!
         let id = row.get::<_, String>(0)?;
         let id = Uuid::parse_str(&id).unwrap();
+        let size = row.get::<_, Option<u64>>(7)?;
+        let blob_format = row.get::<_, Option<String>>(8)?;
+        let blob_format = blob_format_from_sql(blob_format);
 
         Ok(RouteStub {
             id,
@@ -212,10 +215,20 @@ impl RouteStub {
             provider_id: row.get::<_, String>(3)?,
             provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
             route: row.get(5)?,
-            // TODO(b5) - accurately capture size & blob format
-            size: None,
-            blob_format: None,
+            size,
+            blob_format,
         })
+    }
+}
+
+fn blob_format_from_sql(value: Option<String>) -> Option<BlobFormat> {
+    match value {
+        Some(string) => match string.as_str() {
+            "Raw" => Some(BlobFormat::Raw),
+            "HashSeq" => Some(BlobFormat::HashSeq),
+            _ => None,
+        },
+        None => None,
     }
 }
 

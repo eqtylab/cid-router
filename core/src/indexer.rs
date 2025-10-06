@@ -9,11 +9,16 @@ pub struct Indexer {
 }
 
 impl Indexer {
-    pub async fn spawn(interval: u64, cx: Context, providers: Vec<Arc<dyn Crp>>) -> Self {
+    pub async fn spawn(interval_seconds: u64, cx: Context, providers: Vec<Arc<dyn Crp>>) -> Self {
         let task = tokio::spawn(async move {
-            info!("Starting indexer");
+            info!("Starting indexer for {} providers", providers.len());
             loop {
                 for provider in &providers {
+                    info!(
+                        "Reindexing provider {}:{}...",
+                        provider.provider_type().to_string(),
+                        provider.provider_id()
+                    );
                     if let Err(err) = provider.reindex(&cx).await {
                         warn!(
                             "Error reindexing provider {}:{}: {}",
@@ -23,7 +28,7 @@ impl Indexer {
                         );
                     }
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(interval)).await;
+                tokio::time::sleep(std::time::Duration::from_secs(interval_seconds)).await;
             }
         });
         Self { _task: task }

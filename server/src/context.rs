@@ -13,6 +13,7 @@ pub struct Context {
     pub port: u16,
     pub core: cid_router_core::context::Context,
     pub providers: Vec<Arc<dyn Crp>>,
+    pub indexer: Indexer,
 }
 
 impl Context {
@@ -37,13 +38,14 @@ impl Context {
         .into_iter()
         .collect::<Result<Vec<_>>>()?;
 
-        let _indexer = Indexer::spawn(3600, core.clone(), providers.clone()).await;
+        let indexer = Indexer::spawn(3600, core.clone(), providers.clone()).await;
 
         Ok(Self {
             start_time,
             port,
             core,
             providers,
+            indexer,
         })
     }
 }

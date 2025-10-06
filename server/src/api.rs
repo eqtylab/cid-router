@@ -53,8 +53,9 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
             "/",
             get(move || async move { Redirect::temporary("/swagger") }),
         )
-        // .route("/v1/routes/:cid", get(v1::routes::get_routes))
-        // .route("/v1/status", get(v1::status::get_status))
+        .route("/v1/routes", get(v1::routes::list_routes))
+        .route("/v1/routes/{cid}", get(v1::routes::get_routes))
+        .route("/v1/data/{cid}", get(v1::routes::get_data))
         .with_state(ctx);
 
     let listener = TcpListener::bind(addr).await?;

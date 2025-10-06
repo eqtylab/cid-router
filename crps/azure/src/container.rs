@@ -1,14 +1,18 @@
 use std::num::NonZeroU32;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
+use azure_core::new_http_client;
+use azure_identity::{ClientSecretCredential, TokenCredentialOptions};
 use azure_storage::prelude::*;
 use azure_storage_blobs::{blob::Blob, prelude::*};
 use bytes::Bytes;
 use cid::Cid;
 use futures::{Stream, StreamExt};
 use iroh_blobs::BlobFormat;
+use log::info;
 
 use cid_router_core::{
     Context,
@@ -19,7 +23,7 @@ use cid_router_core::{
     routes::{Route, RouteStub},
 };
 
-use crate::config::ContainerConfig;
+use crate::config::{ContainerConfig, Credentials};
 
 /// An indexer can perform route indexing operations, scoped to a single azure
 /// blob container.
@@ -95,10 +99,34 @@ impl RouteResolver for Container {
 impl Container {
     pub fn new(cfg: ContainerConfig) -> Self {
         let ContainerConfig {
-            account, container, ..
+            account,
+            container,
+            credentials,
+            ..
         } = cfg.clone();
-        // TODO: support credentials for private blob storage
-        let credentials = StorageCredentials::anonymous();
+        info!(
+            "Creating container client {account}:{container} with credentials: {}",
+            credentials.is_some()
+        );
+        let credentials = match credentials {
+            Some(c) => {
+                let client = new_http_client();
+                let Credentials {
+                    tenant_id,
+                    client_id,
+                    client_secret,
+                } = c;
+                let credential = Arc::new(ClientSecretCredential::new(
+                    client,
+                    tenant_id,
+                    client_id,
+                    client_secret,
+                    TokenCredentialOptions::default(),
+                ));
+                StorageCredentials::token_credential(credential)
+            }
+            None => StorageCredentials::anonymous(),
+        };
         let client = BlobServiceClient::new(account, credentials);
         let client = client.container_client(container);
 
@@ -135,6 +163,7 @@ impl Container {
             .await
             .expect("stream failed")?;
 
+        // TODO - check if results length is equal to max_results & paginate if so
         for blob in response.blobs.blobs() {
             if !self
                 .cfg
@@ -189,7 +218,7 @@ impl Container {
     }
 
     pub async fn update_blob_index_hashes(&self, cx: &Context) -> Result<()> {
-        log::debug!("Updating blob index hashes...");
+        info!("Updating blob index hashes...");
 
         let stubs = cx
             .db()
@@ -198,7 +227,7 @@ impl Container {
 
         for stub in stubs {
             let cid = self.calculate_blob_cid(&stub).await?;
-            log::trace!("Computed cid={cid} for blob: name={}", stub.route);
+            log::info!("Computed cid={cid} for blob: name={}", stub.route);
             let route = stub.builder().cid(cid).build(cx)?;
             cx.db().complete_stub(&route).await?;
         }

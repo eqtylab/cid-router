@@ -1,18 +1,30 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContainerConfig {
     pub account: String,
     pub container: String,
+    pub credentials: Option<Credentials>,
     pub filter: ContainerBlobFilter,
-    pub indexing_strategy: IndexingStrategy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum IndexingStrategy {
-    /// Update the index every `x` seconds
-    PollInterval(u64),
+pub struct Credentials {
+    pub tenant_id: String,
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+impl fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Credentials")
+            .field("client_id", &"[REDACTED]")
+            .field("client_secret", &"[REDACTED]")
+            .field("tenant_id", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

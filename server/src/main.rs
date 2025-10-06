@@ -21,10 +21,12 @@ async fn main() -> Result<()> {
 }
 
 async fn start(args: cli::Start) -> Result<()> {
+    env_logger::init();
     let repo_path = args
         .repo_path
         .or(Some(cid_router_core::repo::Repo::default_location()))
         .unwrap();
+    info!("opening repo at {}", repo_path.display());
     let repo = Repo::open_or_create(repo_path.clone()).await?;
 
     let server_config_path = repo_path.join("server.toml");
@@ -36,8 +38,6 @@ async fn start(args: cli::Start) -> Result<()> {
             Config::default().write(server_config_path).await?
         }
     };
-
-    env_logger::init();
 
     info!("Starting: {config:#?}");
 
