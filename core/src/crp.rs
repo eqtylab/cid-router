@@ -50,24 +50,18 @@ pub trait Crp: Send + Sync {
 
 /// All capabilities a CRP may have represented as self-referential trait objects.
 pub struct CrpCapabilities<'a> {
-    pub bytes_resolver: Option<&'a dyn BytesResolver>,
+    pub route_resolver: Option<&'a dyn RouteResolver>,
     pub size_resolver: Option<&'a dyn SizeResolver>,
 }
 
-// /// A RoutesResolver can provide routes for a given CID.
-// #[async_trait]
-// pub trait RoutesResolver {
-//     async fn get_routes(&self, cid: &Cid) -> Result<Vec<Route>>;
-// }
-
-/// A BytesResolver can dereference a CID pointer, turning it into a stream of bytes, accepting
+/// A RouteResolver can dereference a route, turning it into a stream of bytes, accepting
 /// authentication data.
 #[async_trait]
-pub trait BytesResolver {
+pub trait RouteResolver {
     async fn get_bytes(
         &self,
         route: &Route,
-        auth: Vec<u8>,
+        auth: Option<bytes::Bytes>,
     ) -> Result<
         Pin<
             Box<

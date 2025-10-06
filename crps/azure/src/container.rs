@@ -5,6 +5,7 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use azure_storage::prelude::*;
 use azure_storage_blobs::{blob::Blob, prelude::*};
+use bytes::Bytes;
 use cid::Cid;
 use futures::{Stream, StreamExt};
 use iroh_blobs::BlobFormat;
@@ -13,7 +14,7 @@ use cid_router_core::{
     Context,
     cid::{Codec, blake3_hash_to_cid},
     cid_filter::CidFilter,
-    crp::{BytesResolver, Crp, CrpCapabilities, ProviderType},
+    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
@@ -46,7 +47,7 @@ impl Crp for Container {
 
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
-            bytes_resolver: Some(self),
+            route_resolver: Some(self),
             size_resolver: None, // TODO
         }
     }
@@ -57,11 +58,11 @@ impl Crp for Container {
 }
 
 #[async_trait]
-impl BytesResolver for Container {
+impl RouteResolver for Container {
     async fn get_bytes(
         &self,
         route: &Route,
-        _auth: Vec<u8>, // TODO - support user-provided authentication
+        _auth: Option<Bytes>, // TODO - support user-provided authentication
     ) -> Result<
         Pin<
             Box<
@@ -71,9 +72,23 @@ impl BytesResolver for Container {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
-        let blob_name = Self::route_url_to_name(&route.route)?;
-        let _client = self.client.blob_client(blob_name);
-        todo!();
+        let name = Self::route_url_to_name(&route.route)?;
+        let client = self.client.blob_client(&name);
+        let stream = client.get().into_stream();
+
+        // return a mapped stream that maps each chunk response to its data
+        let mapped_stream = stream.then(|chunk_response| async move {
+            match chunk_response {
+                Ok(chunk) => chunk
+                    .data
+                    .collect()
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+                Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            }
+        });
+
+        Ok(Box::pin(mapped_stream))
     }
 }
 
@@ -182,43 +197,10 @@ impl Container {
             .await?;
 
         for stub in stubs {
-            let builder = stub.builder();
-            let RouteStub { route, size, .. } = stub;
-            let name = Self::route_url_to_name(&route)?;
-
-            log::trace!(
-                "Streaming blob to compute hash: container={} name={name}",
-                &self.cfg.container
-            );
-
-            let hash = {
-                let mut hasher = blake3::Hasher::new();
-
-                if let Some(size) = size
-                    && size == 0
-                {
-                    hasher.update(&[]);
-                } else {
-                    let blob_client = self.client.blob_client(&route);
-                    let mut blob_stream = blob_client.get().into_stream();
-
-                    while let Some(chunk_response) = blob_stream.next().await {
-                        let chunk_response = chunk_response?;
-                        let chunk = chunk_response.data.collect().await?;
-
-                        hasher.update(&chunk);
-                    }
-                }
-                hasher.finalize()
-            };
-
-            log::trace!("Computed hash={hash} for blob: name={name}",);
-
-            let cid = blake3_hash_to_cid(hash.into(), Codec::Raw);
-
-            let completed_route = builder.cid(cid).build(cx)?;
-
-            cx.db().complete_stub(&completed_route).await?;
+            let cid = self.calculate_blob_cid(&stub).await?;
+            log::trace!("Computed cid={cid} for blob: name={}", stub.route);
+            let route = stub.builder().cid(cid).build(cx)?;
+            cx.db().complete_stub(&route).await?;
         }
 
         log::debug!("Finished updating blob index hashes.");
@@ -400,7 +382,7 @@ impl Container {
     // }
 
     async fn calculate_blob_cid(&self, stub: &RouteStub) -> Result<Cid> {
-        let name = stub.route.clone();
+        let name = Self::route_url_to_name(&stub.route)?;
 
         log::trace!("Streaming blob to compute hash: name={name}");
 
