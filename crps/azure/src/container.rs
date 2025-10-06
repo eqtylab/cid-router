@@ -11,7 +11,6 @@ use azure_storage_blobs::{blob::Blob, prelude::*};
 use bytes::Bytes;
 use cid::Cid;
 use futures::{Stream, StreamExt};
-use iroh_blobs::BlobFormat;
 use log::info;
 
 use cid_router_core::{
@@ -182,7 +181,7 @@ impl Container {
                 let stub = Route::builder(self)
                     .size(blob.properties.content_length)
                     .url(url)
-                    .format(BlobFormat::Raw)
+                    .multicodec(Codec::Raw)
                     .build_stub()?;
 
                 cx.db().insert_stub(&stub).await?;

@@ -1,12 +1,14 @@
+use std::str::FromStr;
+
 use anyhow::anyhow;
 use cid::{Cid, CidGeneric};
 use iroh::PublicKey;
-use iroh_blobs::BlobFormat;
 use serde::{Deserialize, Serialize};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime as DateTime};
 use uuid::Uuid;
 
 use crate::{
+    cid::Codec,
     context::Signer,
     crp::{Crp, ProviderType},
 };
@@ -23,7 +25,7 @@ pub struct Route {
     pub url: String,
     pub cid: CidGeneric<64>,
     pub size: u64,
-    pub blob_format: BlobFormat,
+    pub multicodec: Codec,
     pub creator: PublicKey, // PublicKey or DID
     pub signature: Vec<u8>,
 }
@@ -41,12 +43,8 @@ impl Route {
         let data = row.get::<_, Vec<u8>>(6)?;
         let cid = Cid::try_from(data).unwrap();
 
-        let blob_format_str: String = row.get(8)?;
-        let blob_format = match blob_format_str.as_str() {
-            "Raw" => BlobFormat::Raw,
-            "HashSeq" => BlobFormat::HashSeq,
-            _ => BlobFormat::Raw, // default fallback
-        };
+        let multicodec: String = row.get(8)?;
+        let multicodec = Codec::from_str(&multicodec).unwrap();
 
         let pub_key = row.get::<_, [u8; 32]>(9)?;
         // TODO(b5) - remove unwarp
@@ -61,7 +59,7 @@ impl Route {
             url: row.get(5)?,
             cid,
             size: row.get::<_, i64>(7)? as u64,
-            blob_format,
+            multicodec,
             creator,
             signature: row.get(10)?,
         })
@@ -76,7 +74,7 @@ pub struct RouteBuilder {
     cid: Option<Cid>,
     size: Option<u64>,
     url: Option<String>,
-    blob_format: Option<BlobFormat>,
+    multicodec: Option<Codec>,
 }
 
 impl RouteBuilder {
@@ -88,7 +86,7 @@ impl RouteBuilder {
             cid: None,
             size: None,
             url: None,
-            blob_format: None,
+            multicodec: None,
         }
     }
 
@@ -107,8 +105,8 @@ impl RouteBuilder {
         self
     }
 
-    pub fn format(mut self, format: BlobFormat) -> Self {
-        self.blob_format = Some(format);
+    pub fn multicodec(mut self, codec: Codec) -> Self {
+        self.multicodec = Some(codec);
         self
     }
 
@@ -121,7 +119,7 @@ impl RouteBuilder {
             verified_at: now,
             provider_id: self.provider_id,
             provider_type: self.provider_type,
-            blob_format: self.blob_format,
+            multicodec: self.multicodec,
             size: self.size,
             url: route,
         })
@@ -130,14 +128,15 @@ impl RouteBuilder {
     pub fn build(&self, signer: &impl Signer) -> anyhow::Result<Route> {
         let cid = self.cid.ok_or_else(|| anyhow!("cid is required"))?;
         let size = self.size.ok_or_else(|| anyhow!("size is required"))?;
-        let route = self
+        let url = self
             .url
             .clone()
             .ok_or_else(|| anyhow!("route is required"))?;
-        let blob_format = self
-            .blob_format
-            .ok_or_else(|| anyhow!("format is required"))?;
-        let signature = sign_route(signer, cid, size, &route, blob_format);
+        let multicodec = self
+            .multicodec
+            .to_owned()
+            .ok_or_else(|| anyhow!("multicodec is required"))?;
+        let signature = sign_route(signer, cid, size, &url, multicodec);
 
         let now = DateTime::now_utc();
 
@@ -149,8 +148,8 @@ impl RouteBuilder {
             provider_type: self.provider_type.clone(),
             cid,
             size,
-            url: route,
-            blob_format,
+            url,
+            multicodec,
             signature,
             creator: signer.public_key(),
         })
@@ -162,7 +161,7 @@ fn sign_route(
     _cid: Cid,
     _size: u64,
     _route: &str,
-    _format: BlobFormat,
+    _format: Codec,
 ) -> Vec<u8> {
     // TODO - finish for real: serialize these values, hash them, and sign hash
     vec![]
@@ -181,7 +180,7 @@ pub struct RouteStub {
     pub created_at: DateTime,
     #[serde(with = "time::serde::rfc3339")]
     pub verified_at: DateTime,
-    pub blob_format: Option<BlobFormat>,
+    pub multicodec: Option<Codec>,
     pub size: Option<u64>,
     pub url: String,
 }
@@ -196,7 +195,7 @@ impl RouteStub {
             cid: None,
             size: self.size,
             url: Some(self.url.clone()),
-            blob_format: self.blob_format,
+            multicodec: self.multicodec.clone(),
         }
     }
 
@@ -206,7 +205,7 @@ impl RouteStub {
         let id = Uuid::parse_str(&id).unwrap();
         let size = row.get::<_, Option<u64>>(7)?;
         let blob_format = row.get::<_, Option<String>>(8)?;
-        let blob_format = blob_format_from_sql(blob_format);
+        let blob_format = multicodec_from_sql(blob_format);
 
         Ok(RouteStub {
             id,
@@ -216,18 +215,17 @@ impl RouteStub {
             provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
             url: row.get(5)?,
             size,
-            blob_format,
+            multicodec: blob_format,
         })
     }
 }
 
-fn blob_format_from_sql(value: Option<String>) -> Option<BlobFormat> {
+fn multicodec_from_sql(value: Option<String>) -> Option<Codec> {
     match value {
-        Some(string) => match string.as_str() {
-            "Raw" => Some(BlobFormat::Raw),
-            "HashSeq" => Some(BlobFormat::HashSeq),
-            _ => None,
-        },
+        Some(string) => {
+            let codec = Codec::from_str(&string).unwrap();
+            Some(codec)
+        }
         None => None,
     }
 }

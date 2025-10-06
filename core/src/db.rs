@@ -90,7 +90,7 @@ impl Db {
                 size INTEGER,
                 creator BLOB,
                 signature BLOB,
-                blob_format TEXT,
+                multicodec TEXT,
                 UNIQUE(provider_id, provider_type, cid),
                 UNIQUE(provider_id, provider_type, url)
             )",
@@ -105,7 +105,7 @@ impl Db {
         let conn = self.conn.lock().await;
 
         let mut stmt = conn.prepare(
-            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature)
+            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
         )?;
 
@@ -122,7 +122,7 @@ impl Db {
             route.url,
             route.cid.to_bytes(),
             route.size as i64,
-            route.blob_format.to_string(),
+            route.multicodec.to_string(),
             route.creator.as_bytes(),
             route.signature,
         ])?;
@@ -138,7 +138,7 @@ impl Db {
     ) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE cid is not null
              ORDER BY ?1 DESC
@@ -165,7 +165,7 @@ impl Db {
     ) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE cid is not null
              AND provider_id = ?1
@@ -187,7 +187,7 @@ impl Db {
     pub async fn get_route(&self, id: Uuid) -> Result<Option<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes WHERE id = ?1 AND cid is not null",
         )?;
 
@@ -203,7 +203,7 @@ impl Db {
     pub async fn routes_for_cid(&self, cid: Cid) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE cid = ?1
              AND cid IS NOT NULL
@@ -222,7 +222,7 @@ impl Db {
     pub async fn routes_for_url(&self, url: &str) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE url = ?1
              AND cid IS NOT NULL
@@ -246,7 +246,7 @@ impl Db {
     ) -> Result<Vec<Route>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE cid IS NOT NULL
              ORDER BY ?1
@@ -275,7 +275,7 @@ impl Db {
     ) -> Result<Vec<RouteStub>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature
+            "SELECT id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature
              FROM routes
              WHERE provider_id = ?1
              ORDER BY ?2
@@ -297,7 +297,7 @@ impl Db {
     pub async fn insert_stub(&self, stub: &RouteStub) -> Result<()> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, blob_format, creator, signature)
+            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )?;
 
@@ -312,11 +312,11 @@ impl Db {
             stub.provider_id,
             stub.provider_type.to_string(),
             stub.url,
-            None::<Vec<u8>>,                                   // cid
-            stub.size,                                         // size
-            stub.blob_format.map(|format| format.to_string()), // blob_format
-            None::<Vec<u8>>,                                   // creator
-            None::<Vec<u8>>,                                   // signature
+            None::<Vec<u8>>,                                  // cid
+            stub.size,                                        // size
+            stub.multicodec.map(|format| format.to_string()), // multicodec
+            None::<Vec<u8>>,                                  // creator
+            None::<Vec<u8>>,                                  // signature
         ])?;
 
         Ok(())
@@ -327,7 +327,7 @@ impl Db {
         let mut stmt = conn.prepare(
             "UPDATE routes
                 SET verified_at = ?2, provider_id = ?3, provider_type = ?4, url = ?5,
-                cid = ?6, size = ?7, blob_format = ?8, creator = ?9, signature = ?10
+                cid = ?6, size = ?7, multicodec = ?8, creator = ?9, signature = ?10
                 WHERE id = ?1",
         )?;
 
@@ -341,7 +341,7 @@ impl Db {
             route.url,
             route.cid.to_bytes(),
             route.size as i64,
-            route.blob_format.to_string(),
+            route.multicodec.to_string(),
             route.creator.as_bytes(),
             route.signature,
         ])?;
@@ -352,6 +352,7 @@ impl Db {
 
 #[cfg(test)]
 mod tests {
+    use crate::cid::Codec;
     use crate::cid_filter::CidFilter;
     use crate::crp::{Crp, CrpCapabilities, ProviderType};
     use crate::Context;
@@ -403,7 +404,7 @@ mod tests {
             .cid(cid)
             .size(1024)
             .url("/test/route".to_string())
-            .format(BlobFormat::Raw)
+            .multicodec(Codec::Raw)
             .build(&ctx)
             .unwrap();
 
@@ -471,7 +472,7 @@ mod tests {
             .builder()
             .cid(cid)
             .size(1024)
-            .format(BlobFormat::Raw)
+            .multicodec(Codec::Raw)
             .build(&ctx)
             .unwrap();
 
