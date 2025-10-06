@@ -132,26 +132,6 @@ impl Container {
         Self { cfg, client }
     }
 
-    // pub async fn update_blob_index(
-    //     &self,
-    //     cx: &Context,
-    //     blob_storage_config: &BlobStorageConfig,
-    // ) -> Result<()> {
-    //     log::debug!("Updating blob index...");
-
-    //     for container_cfg in &blob_storage_config.containers {
-    //         self.add_stubs_for_missing_blobs(cx, container_cfg.clone())
-    //             .await?;
-
-    //         // self.prune_index_entries_for_deleted_or_filtered_blobs(account, container, filter)
-    //         //     .await?;
-    //     }
-
-    //     log::debug!("Finished updating blob index.");
-
-    //     Ok(())
-    // }
-
     async fn add_stubs_for_missing_blobs(&self, cx: &Context) -> Result<()> {
         let response = self
             .client
@@ -172,9 +152,6 @@ impl Container {
                 continue;
             }
 
-            // let name = blob.name.clone();
-            // let timestamp = blob.properties.last_modified.unix_timestamp();
-            // let size = blob.properties.content_length;
             let url = self.blob_to_route_url(blob);
 
             if cx.db().routes_for_url(&url).await?.is_empty() {

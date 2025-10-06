@@ -358,7 +358,6 @@ mod tests {
     use crate::Context;
     use async_trait::async_trait;
     use cid::Cid;
-    use iroh_blobs::BlobFormat;
 
     use super::*;
 
