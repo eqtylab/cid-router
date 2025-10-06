@@ -352,8 +352,10 @@ impl Db {
 
 #[cfg(test)]
 mod tests {
-    use crate::crp::ProviderType;
-    use crate::{crp::Provider, Context};
+    use crate::cid_filter::CidFilter;
+    use crate::crp::{Crp, CrpCapabilities, ProviderType};
+    use crate::Context;
+    use async_trait::async_trait;
     use cid::Cid;
     use iroh_blobs::BlobFormat;
 
@@ -361,13 +363,29 @@ mod tests {
 
     struct StubAzureProvider {}
 
-    impl Provider for StubAzureProvider {
+    #[async_trait]
+    impl Crp for StubAzureProvider {
         fn provider_id(&self) -> String {
             "azure".to_string()
         }
 
         fn provider_type(&self) -> ProviderType {
             ProviderType::Azure
+        }
+
+        async fn reindex(&self, _cx: &Context) -> anyhow::Result<()> {
+            todo!();
+        }
+
+        fn capabilities(&self) -> CrpCapabilities<'_> {
+            CrpCapabilities {
+                route_resolver: None,
+                size_resolver: None,
+            }
+        }
+
+        fn cid_filter(&self) -> crate::cid_filter::CidFilter {
+            CidFilter::None
         }
     }
 
@@ -391,7 +409,10 @@ mod tests {
 
         db.insert_route(&route).await.unwrap();
 
-        let routes = db.list_routes(0, 10000).await.unwrap();
+        let routes = db
+            .list_routes(OrderBy::CreatedAt(Direction::Desc), 0, 10000)
+            .await
+            .unwrap();
         assert_eq!(routes.len(), 1);
 
         let retrieved_route = db.get_route(route.id).await.unwrap().unwrap();
