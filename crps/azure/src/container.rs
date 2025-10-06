@@ -76,7 +76,7 @@ impl RouteResolver for Container {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
-        let name = Self::route_url_to_name(&route.route)?;
+        let name = Self::route_url_to_name(&route.url)?;
         let client = self.client.blob_client(&name);
         let stream = client.get().into_stream();
 
@@ -181,7 +181,7 @@ impl Container {
             if cx.db().routes_for_url(&url).await?.is_empty() {
                 let stub = Route::builder(self)
                     .size(blob.properties.content_length)
-                    .route(url)
+                    .url(url)
                     .format(BlobFormat::Raw)
                     .build_stub()?;
 
@@ -227,7 +227,7 @@ impl Container {
 
         for stub in stubs {
             let cid = self.calculate_blob_cid(&stub).await?;
-            log::info!("Computed cid={cid} for blob: name={}", stub.route);
+            log::info!("Computed cid={cid} for blob: name={}", stub.url);
             let route = stub.builder().cid(cid).build(cx)?;
             cx.db().complete_stub(&route).await?;
         }
@@ -411,7 +411,7 @@ impl Container {
     // }
 
     async fn calculate_blob_cid(&self, stub: &RouteStub) -> Result<Cid> {
-        let name = Self::route_url_to_name(&stub.route)?;
+        let name = Self::route_url_to_name(&stub.url)?;
 
         log::trace!("Streaming blob to compute hash: name={name}");
 

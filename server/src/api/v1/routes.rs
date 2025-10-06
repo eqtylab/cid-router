@@ -42,7 +42,7 @@ impl From<cid_router_core::routes::Route> for Route {
             provider_type,
             provider_id,
             size,
-            route,
+            url: route,
             cid,
             ..
         } = route;

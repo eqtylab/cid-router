@@ -20,7 +20,7 @@ pub struct Route {
     pub verified_at: DateTime,
     pub provider_id: String,
     pub provider_type: ProviderType,
-    pub route: String,
+    pub url: String,
     pub cid: CidGeneric<64>,
     pub size: u64,
     pub blob_format: BlobFormat,
@@ -58,7 +58,7 @@ impl Route {
             verified_at: DateTime::parse(&row.get::<_, String>(2)?, &Rfc3339).unwrap(),
             provider_id: row.get::<_, String>(3)?,
             provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
-            route: row.get(5)?,
+            url: row.get(5)?,
             cid,
             size: row.get::<_, i64>(7)? as u64,
             blob_format,
@@ -75,7 +75,7 @@ pub struct RouteBuilder {
     provider_type: ProviderType,
     cid: Option<Cid>,
     size: Option<u64>,
-    route: Option<String>,
+    url: Option<String>,
     blob_format: Option<BlobFormat>,
 }
 
@@ -87,7 +87,7 @@ impl RouteBuilder {
             provider_type: provider.provider_type(),
             cid: None,
             size: None,
-            route: None,
+            url: None,
             blob_format: None,
         }
     }
@@ -102,8 +102,8 @@ impl RouteBuilder {
         self
     }
 
-    pub fn route(mut self, route: impl Into<String>) -> Self {
-        self.route = Some(route.into());
+    pub fn url(mut self, route: impl Into<String>) -> Self {
+        self.url = Some(route.into());
         self
     }
 
@@ -113,7 +113,7 @@ impl RouteBuilder {
     }
 
     pub fn build_stub(self) -> anyhow::Result<RouteStub> {
-        let route = self.route.ok_or_else(|| anyhow!("route is required"))?;
+        let route = self.url.ok_or_else(|| anyhow!("route is required"))?;
         let now = DateTime::now_utc();
         Ok(RouteStub {
             id: Uuid::new_v4(),
@@ -123,7 +123,7 @@ impl RouteBuilder {
             provider_type: self.provider_type,
             blob_format: self.blob_format,
             size: self.size,
-            route,
+            url: route,
         })
     }
 
@@ -131,7 +131,7 @@ impl RouteBuilder {
         let cid = self.cid.ok_or_else(|| anyhow!("cid is required"))?;
         let size = self.size.ok_or_else(|| anyhow!("size is required"))?;
         let route = self
-            .route
+            .url
             .clone()
             .ok_or_else(|| anyhow!("route is required"))?;
         let blob_format = self
@@ -149,7 +149,7 @@ impl RouteBuilder {
             provider_type: self.provider_type.clone(),
             cid,
             size,
-            route,
+            url: route,
             blob_format,
             signature,
             creator: signer.public_key(),
@@ -183,7 +183,7 @@ pub struct RouteStub {
     pub verified_at: DateTime,
     pub blob_format: Option<BlobFormat>,
     pub size: Option<u64>,
-    pub route: String,
+    pub url: String,
 }
 
 impl RouteStub {
@@ -195,7 +195,7 @@ impl RouteStub {
             provider_type: self.provider_type.clone(),
             cid: None,
             size: self.size,
-            route: Some(self.route.clone()),
+            url: Some(self.url.clone()),
             blob_format: self.blob_format,
         }
     }
@@ -214,7 +214,7 @@ impl RouteStub {
             verified_at: DateTime::parse(&row.get::<_, String>(2)?, &Rfc3339).unwrap(),
             provider_id: row.get::<_, String>(3)?,
             provider_type: ProviderType::from_str(&row.get::<_, String>(4)?).unwrap(),
-            route: row.get(5)?,
+            url: row.get(5)?,
             size,
             blob_format,
         })
