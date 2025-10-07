@@ -1,6 +1,4 @@
-use std::num::NonZeroU32;
-use std::pin::Pin;
-use std::sync::Arc;
+use std::{num::NonZeroU32, pin::Pin, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
@@ -10,9 +8,6 @@ use azure_storage::prelude::*;
 use azure_storage_blobs::{blob::Blob, prelude::*};
 use bytes::Bytes;
 use cid::Cid;
-use futures::{Stream, StreamExt};
-use log::info;
-
 use cid_router_core::{
     Context,
     cid::{Codec, blake3_hash_to_cid},
@@ -21,6 +16,8 @@ use cid_router_core::{
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
+use futures::{Stream, StreamExt};
+use log::info;
 
 use crate::config::{ContainerConfig, Credentials};
 

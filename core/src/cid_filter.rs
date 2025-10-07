@@ -111,9 +111,9 @@ mod tests {
     use cid::multihash::Multihash;
 
     use super::*;
-    use crate::{
-        cid::mc_codes::{DAG_CBOR, RAW},
-        cid::mh_codes::{BLAKE3, SHA256},
+    use crate::cid::{
+        mc_codes::{DAG_CBOR, RAW},
+        mh_codes::{BLAKE3, SHA256},
     };
 
     fn blake3_raw() -> Cid {

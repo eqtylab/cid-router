@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::{path::Path, str::FromStr};
+use std::{path::Path, str::FromStr, sync::Arc};
 
 use cid::Cid;
 use rusqlite::{params, Connection, Result};
@@ -352,14 +351,16 @@ impl Db {
 
 #[cfg(test)]
 mod tests {
-    use crate::cid::Codec;
-    use crate::cid_filter::CidFilter;
-    use crate::crp::{Crp, CrpCapabilities, ProviderType};
-    use crate::Context;
     use async_trait::async_trait;
     use cid::Cid;
 
     use super::*;
+    use crate::{
+        cid::Codec,
+        cid_filter::CidFilter,
+        crp::{Crp, CrpCapabilities, ProviderType},
+        Context,
+    };
 
     struct StubAzureProvider {}
 
