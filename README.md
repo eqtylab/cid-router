@@ -21,9 +21,10 @@ Content address everything.
 |[crates](/crates)| |
 |&emsp;[api-utils](/crates/api-utils)|Utility library for API binaries |
 |[crps](/crps)|Crates for individual CID Route Providers |
+|&emsp;[azure](/crps/azure)| |
 |&emsp;[iroh](/crps/iroh)|Iroh CRP Crate |
 |[server](/server)|CID Router Server |
- 
+
 # Quick Start
 
 Nix is used for managing development environments and build artifacts.
