@@ -38,14 +38,15 @@ impl Codec {
     }
 }
 
-impl ToString for Codec {
-    fn to_string(&self) -> String {
-        match self {
-            Codec::Raw => "raw".to_string(),
-            Codec::DagCbor => "dag-cbor".to_string(),
-            Codec::GitRaw => "git-raw".to_string(),
-            Codec::Blake3HashSeq => "blake3-hashseq".to_string(),
-        }
+impl std::fmt::Display for Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Codec::Raw => "raw",
+            Codec::DagCbor => "dag-cbor",
+            Codec::GitRaw => "git-raw",
+            Codec::Blake3HashSeq => "blake3-hashseq",
+        };
+        write!(f, "{}", str)
     }
 }
 

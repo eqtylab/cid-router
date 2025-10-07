@@ -24,8 +24,7 @@ async fn start(args: cli::Start) -> Result<()> {
     env_logger::init();
     let repo_path = args
         .repo_path
-        .or(Some(cid_router_core::repo::Repo::default_location()))
-        .unwrap();
+        .unwrap_or(cid_router_core::repo::Repo::default_location());
     info!("opening repo at {}", repo_path.display());
     let repo = Repo::open_or_create(repo_path.clone()).await?;
 

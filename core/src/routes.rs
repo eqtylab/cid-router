@@ -195,7 +195,7 @@ impl RouteStub {
             cid: None,
             size: self.size,
             url: Some(self.url.clone()),
-            multicodec: self.multicodec.clone(),
+            multicodec: self.multicodec,
         }
     }
 

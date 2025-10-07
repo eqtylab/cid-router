@@ -125,7 +125,7 @@ impl RouteResolver for IrohCrp {
             .filter_map(|item| {
                 n0_future::future::ready(match item {
                     GetBlobItem::Item(item) => match item {
-                        BaoContentItem::Leaf(leaf) => Some(Ok(bytes::Bytes::from(leaf.data))),
+                        BaoContentItem::Leaf(leaf) => Some(Ok(leaf.data)),
                         // TODO - I don't think this is right. returning None here
                         // will likely end the stream prematurely
                         BaoContentItem::Parent(_parent) => None,

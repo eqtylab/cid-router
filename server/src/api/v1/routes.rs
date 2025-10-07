@@ -135,10 +135,7 @@ pub async fn get_data(
     // TODO - remove unwraps
     let cid = Cid::from_str(&cid).unwrap();
     let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
-    let routes: Vec<cid_router_core::routes::Route> = routes
-        .into_iter()
-        .map(cid_router_core::routes::Route::from)
-        .collect();
+    let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
     let token =
         auth.map(|TypedHeader(Authorization(bearer))| Bytes::from(bearer.token().to_string()));
 
@@ -154,11 +151,9 @@ pub async fn get_data(
                 let stream = route_resolver.get_bytes(&route, token).await.unwrap();
 
                 // Convert Stream<Item = Bytes> into a response body
-                let body = StreamBody::new(stream.map(|result| {
-                    result
-                        .map(|bytes| Frame::data(bytes))
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                }));
+                let body = StreamBody::new(
+                    stream.map(|result| result.map(Frame::data).map_err(std::io::Error::other)),
+                );
 
                 return Response::builder()
                     .status(StatusCode::OK)

@@ -16,13 +16,13 @@ impl Indexer {
                 for provider in &providers {
                     info!(
                         "Reindexing provider {}:{}...",
-                        provider.provider_type().to_string(),
+                        provider.provider_type(),
                         provider.provider_id()
                     );
                     if let Err(err) = provider.reindex(&cx).await {
                         warn!(
                             "Error reindexing provider {}:{}: {}",
-                            provider.provider_type().to_string(),
+                            provider.provider_type(),
                             provider.provider_id(),
                             err
                         );

@@ -27,11 +27,11 @@ impl FromStr for Direction {
     }
 }
 
-impl ToString for Direction {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Direction::Asc => "ASC".to_string(),
-            Direction::Desc => "DESC".to_string(),
+            Direction::Asc => write!(f, "ASC"),
+            Direction::Desc => write!(f, "DESC"),
         }
     }
 }
@@ -41,11 +41,11 @@ pub enum OrderBy {
     Size(Direction),
 }
 
-impl ToString for OrderBy {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for OrderBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OrderBy::CreatedAt(d) => format!("created_at {}", d.to_string()),
-            OrderBy::Size(d) => format!("size {}", d.to_string()),
+            OrderBy::CreatedAt(d) => write!(f, "created_at {}", d),
+            OrderBy::Size(d) => write!(f, "size {}", d),
         }
     }
 }

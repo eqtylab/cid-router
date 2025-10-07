@@ -15,20 +15,25 @@ pub enum ProviderType {
     Azure,
 }
 
-impl ProviderType {
-    pub fn to_string(&self) -> String {
-        match self {
-            ProviderType::Iroh => "iroh".to_string(),
-            ProviderType::Azure => "azure".to_string(),
-        }
-    }
+impl std::str::FromStr for ProviderType {
+    type Err = String;
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "iroh" => Ok(ProviderType::Iroh),
             "azure" => Ok(ProviderType::Azure),
             _ => Err(format!("Unknown provider: {}", s)),
         }
+    }
+}
+
+impl std::fmt::Display for ProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            ProviderType::Iroh => "iroh",
+            ProviderType::Azure => "azure",
+        };
+        write!(f, "{}", str)
     }
 }
 
