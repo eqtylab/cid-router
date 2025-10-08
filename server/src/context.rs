@@ -20,7 +20,7 @@ impl Context {
     pub async fn init_from_repo(repo: Repo, config: Config) -> Result<Self> {
         let start_time = chrono::Utc::now().timestamp();
         let port = config.port;
-        let core = cid_router_core::context::Context::from_repo(repo).await?;
+        let core = cid_router_core::context::Context::from_repo(repo, config.auth.clone()).await?;
 
         let providers = future::join_all(config.providers.into_iter().map(
             |provider_config| async move {

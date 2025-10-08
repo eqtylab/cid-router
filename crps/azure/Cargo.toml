@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cid-router-core = { path = "../../core" }
-crp-iroh = { path = "../iroh" }
 
 anyhow.workspace = true
 async-trait.workspace = true
@@ -16,6 +14,8 @@ azure_storage_blobs.workspace = true
 blake3.workspace = true
 bytes.workspace = true
 cid.workspace = true
+cid-router-core = { path = "../../core" }
+crp-iroh = { path = "../iroh" }
 futures.workspace = true
 hex.workspace = true
 iroh-blobs.workspace = true

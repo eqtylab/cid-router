@@ -9,7 +9,6 @@ use axum::{
     Json,
 };
 use axum_extra::extract::TypedHeader;
-use bytes::Bytes;
 use cid::Cid;
 use cid_router_core::db::{Direction, OrderBy};
 use futures::StreamExt;
@@ -70,6 +69,7 @@ pub struct ListRoutesQuery {
     tag = "/v1/routes",
     params(
         ListRoutesQuery,
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
     ),
     responses(
         (status = 200, description = "List routes", body = Vec<Route>)
@@ -78,7 +78,11 @@ pub struct ListRoutesQuery {
 pub async fn list_routes(
     State(ctx): State<Arc<Context>>,
     query: Query<ListRoutesQuery>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
 ) -> ApiResult<Json<Vec<Route>>> {
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
+
     let direction = query.0.direction.unwrap_or_else(|| "DESC".to_string());
     let offset = query.0.offset.unwrap_or(0);
     let limit = query.0.limit.unwrap_or(100);
@@ -99,14 +103,21 @@ pub async fn list_routes(
     get,
     path = "/v1/routes/{cid}",
     tag = "/v1/routes/{cid}",
+    params(
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
+    ),
     responses(
         (status = 200, description = "Get routes for a CID", body = RoutesResponse)
     )
 )]
 pub async fn get_routes(
     Path(cid): Path<String>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Json<RoutesResponse>> {
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
+
     let cid = Cid::from_str(&cid)?;
     info!("finding routes for cid: {cid}");
     let routes = ctx.core.db().routes_for_cid(cid).await?;
@@ -131,13 +142,13 @@ pub async fn get_data(
     Path(cid): Path<String>,
     auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     State(ctx): State<Arc<Context>>,
-) -> Response {
+) -> ApiResult<Response> {
     // TODO - remove unwraps
     let cid = Cid::from_str(&cid).unwrap();
     let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
     let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
-    let token =
-        auth.map(|TypedHeader(Authorization(bearer))| Bytes::from(bearer.token().to_string()));
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
 
     for route in routes {
         // iterate through providers until you find a match on provider_id and provider_type
@@ -148,24 +159,24 @@ pub async fn get_data(
             .find(|p| provider_id == p.provider_id() && route.provider_type == p.provider_type())
         {
             if let Some(route_resolver) = provider.capabilities().route_resolver {
-                let stream = route_resolver.get_bytes(&route, token).await.unwrap();
+                let stream = route_resolver.get_bytes(&route, None).await.unwrap();
 
                 // Convert Stream<Item = Bytes> into a response body
                 let body = StreamBody::new(
                     stream.map(|result| result.map(Frame::data).map_err(std::io::Error::other)),
                 );
 
-                return Response::builder()
+                return Ok(Response::builder()
                     .status(StatusCode::OK)
                     .header(header::CONTENT_TYPE, "application/octet-stream")
                     .body(Body::new(body))
-                    .unwrap();
+                    .unwrap());
             }
         }
     }
 
-    Response::builder()
+    Ok(Response::builder()
         .status(StatusCode::NOT_FOUND)
         .body(Body::empty())
-        .unwrap()
+        .unwrap())
 }

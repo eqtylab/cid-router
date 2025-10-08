@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::Result;
+use cid_router_core::auth::Auth;
 use crp_azure::ContainerConfig as AzureContainerConfig;
 use crp_iroh::IrohCrpConfig;
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub port: u16,
+    pub auth: Auth,
     pub providers: Vec<ProviderConfig>,
 }
 
@@ -24,6 +26,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             port: 8080,
+            auth: Auth::default(),
             providers: vec![],
         }
     }

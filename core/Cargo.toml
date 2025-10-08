@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-api-utils = { path = "../crates/api-utils" }
 
 anyhow.workspace = true
+api-utils = { path = "../crates/api-utils" }
 async-trait.workspace = true
 axum.workspace = true
 bao-tree.workspace = true
@@ -19,9 +19,11 @@ clap.workspace = true
 dirs-next.workspace = true
 env_logger.workspace = true
 futures.workspace = true
+hmac.workspace = true
 iroh.workspace = true
 iroh-base.workspace = true
 iroh-blobs.workspace = true
+jsonwebtoken.workspace = true
 log.workspace = true
 multihash.workspace = true
 n0-future.workspace = true

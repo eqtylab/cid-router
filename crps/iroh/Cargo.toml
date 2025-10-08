@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cid-router-core = { path = "../../core" }
 
 anyhow.workspace = true
 async-trait.workspace = true
 bao-tree.workspace = true
 bytes.workspace = true
 cid.workspace = true
+cid-router-core = { path = "../../core" }
 futures.workspace = true
 iroh.workspace = true
 iroh-base.workspace = true
