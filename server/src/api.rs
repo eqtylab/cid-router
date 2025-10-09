@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use axum::{response::Redirect, routing::get, Router};
-use cid_router_core::routes;
 use log::info;
 use tokio::net::TcpListener;
 use utoipa::OpenApi;
@@ -23,11 +22,11 @@ use crate::context::Context;
             v1::routes::RoutesResponse,
             v1::routes::Route,
             v1::status::StatusResponse,
-            routes::AzureBlobStorageRouteMethod,
-            routes::UrlRouteMethod,
-            routes::IpfsRouteMethod,
-            routes::IrohRouteMethod,
-            routes::AwsS3RouteMethod,
+            // routes::AzureBlobStorageRouteMethod,
+            // routes::UrlRouteMethod,
+            // routes::IpfsRouteMethod,
+            // routes::IrohRouteMethod,
+            // routes::AwsS3RouteMethod,
         )
     ),
     tags(
@@ -54,8 +53,9 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
             "/",
             get(move || async move { Redirect::temporary("/swagger") }),
         )
-        .route("/v1/routes/:cid", get(v1::routes::get_routes))
-        .route("/v1/status", get(v1::status::get_status))
+        .route("/v1/routes", get(v1::routes::list_routes))
+        .route("/v1/routes/{cid}", get(v1::routes::get_routes))
+        .route("/v1/data/{cid}", get(v1::routes::get_data))
         .with_state(ctx);
 
     let listener = TcpListener::bind(addr).await?;

@@ -4,12 +4,46 @@ use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use futures::Stream;
+use serde::{Deserialize, Serialize};
 
-use crate::{cid_filter::CidFilter, routes::Route};
+use crate::{cid_filter::CidFilter, routes::Route, Context};
+
+/// Set of all supported CID Route Providers (CRPs) throughout the system
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
+pub enum ProviderType {
+    Iroh,
+    Azure,
+}
+
+impl std::str::FromStr for ProviderType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "iroh" => Ok(ProviderType::Iroh),
+            "azure" => Ok(ProviderType::Azure),
+            _ => Err(format!("Unknown provider: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for ProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            ProviderType::Iroh => "iroh",
+            ProviderType::Azure => "azure",
+        };
+        write!(f, "{}", str)
+    }
+}
 
 /// CID Route Provider (CRP) Trait
 #[async_trait]
-pub trait Crp {
+pub trait Crp: Send + Sync {
+    fn provider_id(&self) -> String;
+    fn provider_type(&self) -> ProviderType;
+    async fn reindex(&self, cx: &Context) -> Result<()>;
+
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a>;
 
     fn cid_filter(&self) -> CidFilter;
@@ -21,25 +55,18 @@ pub trait Crp {
 
 /// All capabilities a CRP may have represented as self-referential trait objects.
 pub struct CrpCapabilities<'a> {
-    pub routes_resolver: Option<&'a dyn RoutesResolver>,
-    pub bytes_resolver: Option<&'a dyn BytesResolver>,
+    pub route_resolver: Option<&'a dyn RouteResolver>,
     pub size_resolver: Option<&'a dyn SizeResolver>,
 }
 
-/// A RoutesResolver can provide routes for a given CID.
-#[async_trait]
-pub trait RoutesResolver {
-    async fn get_routes(&self, cid: &Cid) -> Result<Vec<Route>>;
-}
-
-/// A BytesResolver can dereference a CID pointer, turning it into a stream of bytes, accepting
+/// A RouteResolver can dereference a route, turning it into a stream of bytes, accepting
 /// authentication data.
 #[async_trait]
-pub trait BytesResolver {
+pub trait RouteResolver {
     async fn get_bytes(
         &self,
-        cid: &Cid,
-        auth: Vec<u8>,
+        route: &Route,
+        auth: Option<bytes::Bytes>,
     ) -> Result<
         Pin<
             Box<

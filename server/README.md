@@ -24,11 +24,11 @@ Options:
 ```present cargo run -- start --help
 Start service
 
-Usage: cid-router-server start --config <CONFIG>
+Usage: cid-router-server start [OPTIONS]
 
 Options:
-  -c, --config <CONFIG>  Config file to use
-  -h, --help             Print help
+  -r, --repo-path <REPO_PATH>  Repo Path to use to use
+  -h, --help                   Print help
 ```
 
 # Example Config

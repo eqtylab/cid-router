@@ -2,14 +2,22 @@ use std::{str::FromStr, sync::Arc};
 
 use api_utils::ApiResult;
 use axum::{
-    extract::{Path, State},
+    body::Body,
+    extract::{Path, Query, State},
+    http::{header, StatusCode},
+    response::Response,
     Json,
 };
+use axum_extra::extract::TypedHeader;
 use cid::Cid;
-use futures::stream::StreamExt;
-use serde::Serialize;
-use serde_json::Value;
-use utoipa::ToSchema;
+use cid_router_core::db::{Direction, OrderBy};
+use futures::StreamExt;
+use headers::Authorization;
+use http_body::Frame;
+use http_body_util::StreamBody;
+use log::info;
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::context::Context;
 
@@ -20,13 +28,74 @@ pub struct RoutesResponse {
 
 #[derive(Serialize, ToSchema)]
 pub struct Route {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub crp_id: Option<String>,
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub method: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Value>,
+    pub provider_id: String,
+    pub r#type: String,
+    pub size: u64,
+    pub url: String,
+    pub cid: String,
+}
+
+impl From<cid_router_core::routes::Route> for Route {
+    fn from(route: cid_router_core::routes::Route) -> Self {
+        let cid_router_core::routes::Route {
+            provider_type,
+            provider_id,
+            size,
+            url: route,
+            cid,
+            ..
+        } = route;
+
+        Self {
+            provider_id,
+            r#type: provider_type.to_string(),
+            size,
+            url: route,
+            cid: cid.to_string(),
+        }
+    }
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ListRoutesQuery {
+    direction: Option<String>,
+    offset: Option<i64>,
+    limit: Option<i64>,
+}
+// List routes
+#[utoipa::path(
+    get,
+    path = "/v1/routes",
+    tag = "/v1/routes",
+    params(
+        ListRoutesQuery,
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
+    ),
+    responses(
+        (status = 200, description = "List routes", body = Vec<Route>)
+    )
+)]
+pub async fn list_routes(
+    State(ctx): State<Arc<Context>>,
+    query: Query<ListRoutesQuery>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
+) -> ApiResult<Json<Vec<Route>>> {
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
+
+    let direction = query.0.direction.unwrap_or_else(|| "DESC".to_string());
+    let offset = query.0.offset.unwrap_or(0);
+    let limit = query.0.limit.unwrap_or(100);
+    let direction = Direction::from_str(&direction).unwrap();
+
+    let routes = ctx
+        .core
+        .db()
+        .list_routes(OrderBy::CreatedAt(direction), offset, limit)
+        .await?;
+    let routes = routes.into_iter().map(Route::from).collect();
+
+    Ok(Json(routes))
 }
 
 /// Get routes for a CID
@@ -34,69 +103,80 @@ pub struct Route {
     get,
     path = "/v1/routes/{cid}",
     tag = "/v1/routes/{cid}",
+    params(
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
+    ),
     responses(
         (status = 200, description = "Get routes for a CID", body = RoutesResponse)
     )
 )]
 pub async fn get_routes(
     Path(cid): Path<String>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Json<RoutesResponse>> {
-    let Context { providers, .. } = &*ctx;
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
 
     let cid = Cid::from_str(&cid)?;
-
-    let eligible_providers = providers
-        .iter()
-        .filter(|provider| provider.provider_is_eligible_for_cid(&cid))
-        .collect::<Vec<_>>();
-
-    let provider_requests = eligible_providers
-        .into_iter()
-        .map(|provider| async move {
-            if let Some(routes_resolver) = provider.capabilities().routes_resolver {
-                match routes_resolver.get_routes(&cid).await {
-                    Ok(routes) => routes,
-                    Err(e) => {
-                        log::error!(
-                            "failed to get routes for cid={cid} from provider (TODO: provider info): {e}"
-                        );
-                        vec![]
-                    }
-                }
-            } else {
-                vec![]
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let routes = futures::stream::iter(provider_requests.into_iter())
-        .buffered(5)
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    let routes = routes.into_iter().map(Into::into).collect();
+    info!("finding routes for cid: {cid}");
+    let routes = ctx.core.db().routes_for_cid(cid).await?;
+    let routes = routes.into_iter().map(Route::from).collect();
 
     Ok(Json(RoutesResponse { routes }))
 }
 
-impl From<cid_router_core::routes::Route> for Route {
-    fn from(route: cid_router_core::routes::Route) -> Self {
-        let cid_router_core::routes::Route {
-            crp_id,
-            type_,
-            method,
-            metadata,
-        } = route;
+/// Get a data stream for a CID
+#[utoipa::path(
+    get,
+    path = "/v1/data/{cid}",
+    tag = "/v1/data/{cid}",
+    params(
+        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
+    ),
+    responses(
+        (status = 200, description = "Get data for a CID", body = RoutesResponse)
+    )
+)]
+pub async fn get_data(
+    Path(cid): Path<String>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
+    State(ctx): State<Arc<Context>>,
+) -> ApiResult<Response> {
+    // TODO - remove unwraps
+    let cid = Cid::from_str(&cid).unwrap();
+    let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
+    let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.core.authenticate(token).await?;
 
-        Self {
-            crp_id,
-            type_,
-            method,
-            metadata,
+    for route in routes {
+        // iterate through providers until you find a match on provider_id and provider_type
+        let provider_id: String = route.provider_id.clone();
+        if let Some(provider) = ctx
+            .providers
+            .iter()
+            .find(|p| provider_id == p.provider_id() && route.provider_type == p.provider_type())
+        {
+            if let Some(route_resolver) = provider.capabilities().route_resolver {
+                let stream = route_resolver.get_bytes(&route, None).await.unwrap();
+
+                // Convert Stream<Item = Bytes> into a response body
+                let body = StreamBody::new(
+                    stream.map(|result| result.map(Frame::data).map_err(std::io::Error::other)),
+                );
+
+                return Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "application/octet-stream")
+                    .body(Body::new(body))
+                    .unwrap());
+            }
         }
     }
+
+    Ok(Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Body::empty())
+        .unwrap())
 }

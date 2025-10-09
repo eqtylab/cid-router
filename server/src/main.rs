@@ -1,9 +1,10 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
+use cid_router_core::repo::Repo;
 use cid_router_server::{api, cli, config::Config, context::Context};
 use clap::Parser;
-use log::info;
+use log::{info, warn};
 use serde_json::Value;
 use utoipa::openapi::{Info, OpenApi, Paths};
 
@@ -20,13 +21,26 @@ async fn main() -> Result<()> {
 }
 
 async fn start(args: cli::Start) -> Result<()> {
-    let config = Config::from_file(args.config)?;
-
     env_logger::init();
+    let repo_path = args
+        .repo_path
+        .unwrap_or(cid_router_core::repo::Repo::default_location());
+    info!("opening repo at {}", repo_path.display());
+    let repo = Repo::open_or_create(repo_path.clone()).await?;
+
+    let server_config_path = repo_path.join("server.toml");
+    let config = match server_config_path.exists() {
+        true => Config::from_file(server_config_path)?,
+        false => {
+            warn!("config file does not exist. creating new config");
+            tokio::fs::create_dir_all(&repo_path).await?;
+            Config::default().write(server_config_path).await?
+        }
+    };
 
     info!("Starting: {config:#?}");
 
-    let ctx = Context::init_from_config(config).await?;
+    let ctx = Context::init_from_repo(repo, config).await?;
 
     api::start(Arc::new(ctx)).await?;
 

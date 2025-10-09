@@ -3,19 +3,16 @@ use std::{pin::Pin, str::FromStr};
 use anyhow::Result;
 use async_trait::async_trait;
 use bao_tree::io::BaoContentItem;
-use cid::Cid;
+use bytes::Bytes;
 use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
-    crp::{BytesResolver, Crp, CrpCapabilities, RoutesResolver},
-    routes::{IntoRoute, IrohRouteMethod, Route},
+    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
+    routes::Route,
+    Context,
 };
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};
-use iroh_blobs::{
-    get::request::{get_verified_size, GetBlobItem},
-    ticket::BlobTicket,
-    BlobFormat, Hash,
-};
+use iroh_blobs::{get::request::GetBlobItem, ticket::BlobTicket, Hash};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -68,10 +65,22 @@ impl IrohCrp {
 
 #[async_trait]
 impl Crp for IrohCrp {
+    fn provider_id(&self) -> String {
+        "iroh".to_string()
+    }
+
+    fn provider_type(&self) -> ProviderType {
+        ProviderType::Iroh
+    }
+
+    async fn reindex(&self, _cx: &Context) -> anyhow::Result<()> {
+        // TODO: Implement reindexing logic
+        todo!();
+    }
+
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
-            routes_resolver: Some(self),
-            bytes_resolver: Some(self),
+            route_resolver: Some(self),
             size_resolver: None, // TODO
         }
     }
@@ -82,46 +91,11 @@ impl Crp for IrohCrp {
 }
 
 #[async_trait]
-impl RoutesResolver for IrohCrp {
-    async fn get_routes(&self, cid: &Cid) -> Result<Vec<Route>> {
-        let Self { node_addr, .. } = &self;
-
-        let hash = cid.hash().digest();
-        let hash: [u8; 32] = hash.try_into()?;
-        let hash = Hash::from_bytes(hash);
-
-        let connection = self
-            .endpoint
-            .connect(node_addr.clone(), iroh_blobs::protocol::ALPN)
-            .await?;
-
-        // TODO: this just checks the node has the last blake3 chunk of the blob,
-        //       it's not guaranteed to have the full blob and/or any linked blobs
-        let (size, _) = get_verified_size(&connection, &hash).await?;
-
-        let metadata = None;
-
-        let routes = if size > 0 {
-            // TODO: how to determine blob format? for now just only supporting raw
-            let blob_format = BlobFormat::Raw;
-
-            let ticket = BlobTicket::new(node_addr.clone(), hash, blob_format).to_string();
-
-            vec![IrohRouteMethod { ticket }.into_route(None, metadata)?]
-        } else {
-            vec![]
-        };
-
-        Ok(routes)
-    }
-}
-
-#[async_trait]
-impl BytesResolver for IrohCrp {
+impl RouteResolver for IrohCrp {
     async fn get_bytes(
         &self,
-        cid: &Cid,
-        _auth: Vec<u8>,
+        route: &Route,
+        _auth: Option<Bytes>,
     ) -> Result<
         Pin<
             Box<
@@ -132,6 +106,7 @@ impl BytesResolver for IrohCrp {
         Box<dyn std::error::Error + Send + Sync>,
     > {
         let Self { node_addr, .. } = self;
+        let cid = route.cid;
 
         let hash = cid.hash().digest();
         let hash: [u8; 32] = hash.try_into()?;
@@ -150,7 +125,7 @@ impl BytesResolver for IrohCrp {
             .filter_map(|item| {
                 n0_future::future::ready(match item {
                     GetBlobItem::Item(item) => match item {
-                        BaoContentItem::Leaf(leaf) => Some(Ok(bytes::Bytes::from(leaf.data))),
+                        BaoContentItem::Leaf(leaf) => Some(Ok(leaf.data)),
                         // TODO - I don't think this is right. returning None here
                         // will likely end the stream prematurely
                         BaoContentItem::Parent(_parent) => None,
