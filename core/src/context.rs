@@ -4,11 +4,7 @@ use anyhow::Result;
 use iroh::{PublicKey, SecretKey};
 use iroh_base::Signature;
 
-use crate::{
-    auth::{Auth, AuthService},
-    db::Db,
-    repo::Repo,
-};
+use crate::{db::Db, repo::Repo};
 
 // Context bundles shared state to pass around different parts of a program,
 // like CID Route Providers (CRPs) and API wrappers. It bundles identity
@@ -22,27 +18,24 @@ pub struct Context {
 struct Inner {
     key: SecretKey,
     db: Db,
-    auth: Box<dyn AuthService>,
 }
 
 impl Context {
-    pub async fn from_repo(repo: Repo, auth: Auth) -> Result<Self> {
+    pub async fn from_repo(repo: Repo) -> Result<Self> {
         let db = repo.db().await?;
         let key = repo.secret_key().await?;
-        let auth = auth.service().await;
 
-        let inner = Inner { db, key, auth };
+        let inner = Inner { db, key };
 
         Ok(Self {
             inner: Arc::new(inner),
         })
     }
 
-    pub async fn mem(auth: Auth) -> Result<Self> {
+    pub async fn mem() -> Result<Self> {
         let db = Db::new_in_memory().await?;
         let key = SecretKey::generate(rand::rngs::OsRng);
-        let auth = auth.service().await;
-        let inner = Inner { db, key, auth };
+        let inner = Inner { db, key };
 
         Ok(Self {
             inner: Arc::new(inner),
@@ -51,10 +44,6 @@ impl Context {
 
     pub fn db(&self) -> &Db {
         &self.inner.db
-    }
-
-    pub async fn authenticate(&self, token: Option<String>) -> Result<()> {
-        self.inner.auth.authenticate(token).await
     }
 }
 

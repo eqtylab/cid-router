@@ -6,11 +6,15 @@ use crp_azure::Container as AzureContainer;
 use crp_iroh::IrohCrp;
 use futures::future;
 
-use crate::config::{Config, ProviderConfig};
+use crate::{
+    auth::Auth,
+    config::{Config, ProviderConfig},
+};
 
 pub struct Context {
     pub start_time: i64,
     pub port: u16,
+    pub auth: Auth,
     pub core: cid_router_core::context::Context,
     pub providers: Vec<Arc<dyn Crp>>,
     pub indexer: Indexer,
@@ -20,7 +24,10 @@ impl Context {
     pub async fn init_from_repo(repo: Repo, config: Config) -> Result<Self> {
         let start_time = chrono::Utc::now().timestamp();
         let port = config.port;
-        let core = cid_router_core::context::Context::from_repo(repo, config.auth.clone()).await?;
+
+        let auth = config.auth.clone();
+
+        let core = cid_router_core::context::Context::from_repo(repo).await?;
 
         let providers = future::join_all(config.providers.into_iter().map(
             |provider_config| async move {
@@ -43,6 +50,7 @@ impl Context {
         Ok(Self {
             start_time,
             port,
+            auth,
             core,
             providers,
             indexer,

@@ -8,7 +8,7 @@ ci:
     cargo build --locked --workspace
     cargo clippy
     cargo test --workspace
-    # just readme-check
+    just readme-check
 
 # Format files
 fmt:

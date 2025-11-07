@@ -1,4 +1,3 @@
-pub mod auth;
 pub mod cid;
 pub mod cid_filter;
 pub mod context;
