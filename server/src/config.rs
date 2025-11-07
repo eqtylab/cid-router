@@ -1,10 +1,11 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::Result;
-use cid_router_core::auth::Auth;
 use crp_azure::ContainerConfig as AzureContainerConfig;
 use crp_iroh::IrohCrpConfig;
 use serde::{Deserialize, Serialize};
+
+use crate::auth::Auth;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

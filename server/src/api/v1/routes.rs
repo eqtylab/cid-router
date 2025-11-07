@@ -81,7 +81,7 @@ pub async fn list_routes(
     auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
 ) -> ApiResult<Json<Vec<Route>>> {
     let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
-    ctx.core.authenticate(token).await?;
+    ctx.auth.service().await.authenticate(token).await?;
 
     let direction = query.0.direction.unwrap_or_else(|| "DESC".to_string());
     let offset = query.0.offset.unwrap_or(0);
@@ -116,7 +116,7 @@ pub async fn get_routes(
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Json<RoutesResponse>> {
     let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
-    ctx.core.authenticate(token).await?;
+    ctx.auth.service().await.authenticate(token).await?;
 
     let cid = Cid::from_str(&cid)?;
     info!("finding routes for cid: {cid}");
@@ -148,7 +148,7 @@ pub async fn get_data(
     let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
     let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
     let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
-    ctx.core.authenticate(token).await?;
+    ctx.auth.service().await.authenticate(token).await?;
 
     for route in routes {
         // iterate through providers until you find a match on provider_id and provider_type

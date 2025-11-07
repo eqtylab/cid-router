@@ -356,7 +356,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        auth::Auth,
         cid::Codec,
         cid_filter::CidFilter,
         crp::{Crp, CrpCapabilities, ProviderType},
@@ -393,7 +392,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_route_persistence() {
-        let ctx = Context::mem(Auth::None).await.unwrap();
+        let ctx = Context::mem().await.unwrap();
         let db = Db::new_in_memory().await.unwrap();
         let provider = StubAzureProvider {};
 
@@ -427,7 +426,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stubs() {
-        let ctx = Context::mem(Auth::None).await.unwrap();
+        let ctx = Context::mem().await.unwrap();
         let db = Db::new_in_memory().await.unwrap();
         let provider = StubAzureProvider {};
 
