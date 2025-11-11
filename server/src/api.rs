@@ -3,7 +3,11 @@ pub mod v1;
 use std::sync::Arc;
 
 use anyhow::Result;
-use axum::{response::Redirect, routing::get, Router};
+use axum::{
+    response::Redirect,
+    routing::{get, post, put},
+    Router,
+};
 use log::info;
 use tokio::net::TcpListener;
 use utoipa::OpenApi;
@@ -55,7 +59,9 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
         )
         .route("/v1/routes", get(v1::routes::list_routes))
         .route("/v1/routes/{cid}", get(v1::routes::get_routes))
+        .route("/v1/data", post(v1::routes::create_data))
         .route("/v1/data/{cid}", get(v1::routes::get_data))
+        .route("/v1/data/{cid}", put(v1::routes::put_data))
         .with_state(ctx);
 
     let listener = TcpListener::bind(addr).await?;

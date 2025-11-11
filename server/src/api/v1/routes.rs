@@ -9,15 +9,20 @@ use axum::{
     Json,
 };
 use axum_extra::extract::TypedHeader;
+use bao_tree::blake3;
+use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::db::{Direction, OrderBy};
+use cid_router_core::{
+    cid::blake3_hash_to_cid,
+    db::{Direction, OrderBy},
+};
 use futures::StreamExt;
-use headers::Authorization;
+use headers::{Authorization, ContentType};
 use http_body::Frame;
 use http_body_util::StreamBody;
 use log::info;
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::{openapi::content, IntoParams, ToSchema};
 
 use crate::context::Context;
 
@@ -179,4 +184,74 @@ pub async fn get_data(
         .status(StatusCode::NOT_FOUND)
         .body(Body::empty())
         .unwrap())
+}
+
+/// Create data for a CID
+pub async fn create_data(
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
+    content_type: Option<TypedHeader<ContentType>>,
+    State(ctx): State<Arc<Context>>,
+    body: Body,
+) -> ApiResult<Response> {
+    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
+    ctx.auth.service().await.authenticate(token).await?;
+
+    let content_type = content_type.map(|TypedHeader(mime)| mime.to_string());
+    let cid_type = match content_type.as_ref().map(|ct| ct.as_str()) {
+        None => cid_router_core::cid::Codec::Raw,
+        Some("application/x-www-form-urlencoded") => cid_router_core::cid::Codec::Raw,
+        Some("application/octet-stream") => cid_router_core::cid::Codec::Raw,
+        Some("application/vnd.ipld.dag-cbor") => cid_router_core::cid::Codec::DagCbor,
+        _ => {
+            return Ok(Response::builder()
+                .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+                .body(Body::empty())?);
+        }
+    };
+
+    let mut buffer = BytesMut::new();
+    let mut stream = body.into_data_stream();
+    while let Some(chunk) = stream.next().await {
+        let Ok(chunk) = chunk else {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(Body::empty())?);
+        };
+        buffer.extend_from_slice(&chunk);
+    }
+
+    let data = buffer.freeze();
+    let hash = blake3::hash(&data);
+    let cid = blake3_hash_to_cid(hash.into(), cid_type);
+
+    // === 4. TODO: Store `data` using `cid` as key ===
+    // ctx.storage.put(&cid, data).await?; // ← implement this
+
+    // === 5. Respond ===
+    let json = serde_json::json!({
+        "cid": cid.to_string(),
+        "size": data.len(),
+        "location": format!("/v1/data/{}", cid)
+    });
+
+    Ok(Response::builder()
+        .status(StatusCode::CREATED)
+        .header(header::LOCATION, format!("/v1/data/{}", cid))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json.to_string()))
+        .unwrap())
+}
+
+/// Put data for a CID
+///
+/// This assumes that the hash is known by the sender, it will be verified.
+pub async fn put_data(
+    Path(cid): Path<String>,
+    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
+    State(ctx): State<Arc<Context>>,
+) -> ApiResult<Response> {
+    // TODO:
+    // - put data to a remote iroh-blobs store via blobs proto
+    // - create route in db
+    todo!();
 }
