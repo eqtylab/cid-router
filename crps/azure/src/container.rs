@@ -49,7 +49,7 @@ impl Crp for Container {
         CrpCapabilities {
             route_resolver: Some(self),
             size_resolver: None, // TODO
-            blob_writer: None, // TODO
+            blob_writer: None,   // TODO
         }
     }
 

@@ -229,9 +229,12 @@ pub async fn create_data(
     let cid = blake3_hash_to_cid(hash.into(), cid_type);
 
     // Find writers
-    let writers = ctx.providers.iter()
+    let writers = ctx
+        .providers
+        .iter()
         .filter(|p| p.provider_is_eligible_for_cid(&cid))
-        .filter_map(|p| p.capabilities().blob_writer.map(|w| (p, w))).collect::<Vec<_>>();
+        .filter_map(|p| p.capabilities().blob_writer.map(|w| (p, w)))
+        .collect::<Vec<_>>();
     if writers.is_empty() {
         return Ok(Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
@@ -241,14 +244,10 @@ pub async fn create_data(
     let mut outcome = Vec::new();
     for (id, writer) in writers {
         let data = data.clone();
-        let res = writer.put_blob(
-            None,
-            &cid,
-            Box::pin(futures::stream::once(async move { Ok(data) })),
-        ).await;
+        let res = writer.put_blob(None, &cid, &data).await;
         outcome.push((id, res));
     }
-    
+
     for (provider, res) in &outcome {
         if res.is_ok() {
             let route = cid_router_core::routes::Route::builder(*provider)
@@ -257,9 +256,7 @@ pub async fn create_data(
                 .size(data.len() as u64)
                 .url(cid.to_string())
                 .build(&ctx.core)?;
-            ctx.core.db().insert_route(
-                &route
-            ).await?;
+            ctx.core.db().insert_route(&route).await?;
         }
     }
 
@@ -276,4 +273,3 @@ pub async fn create_data(
         .body(Body::from(json.to_string()))
         .unwrap())
 }
-

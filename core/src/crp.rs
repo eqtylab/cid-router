@@ -120,14 +120,6 @@ pub trait BlobWriter: Send + Sync {
         &self,
         auth: Option<bytes::Bytes>,
         cid: &Cid,
-        data: Pin<
-            Box<
-                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
-                    + Send,
-            >,
-        >
-    ) -> Result<
-        (),
-        Box<dyn std::error::Error + Send + Sync>,
-    >;
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

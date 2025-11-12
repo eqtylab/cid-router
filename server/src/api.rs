@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use cid_router_core::context::Signer;
 use log::info;
 use tokio::net::TcpListener;
 use utoipa::OpenApi;
@@ -46,6 +47,7 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
 
     info!("🚀 Starting CID Router");
     info!("🚀 HTTP API = {addr}");
+    info!("🚀 ID = {}", ctx.core.public_key());
 
     let router = Router::new()
         .merge(

@@ -2,15 +2,29 @@ use std::{pin::Pin, str::FromStr};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bao_tree::io::BaoContentItem;
+use bao_tree::{
+    io::{outboard::PreOrderMemOutboard, BaoContentItem},
+    ChunkRanges,
+};
 use bytes::Bytes;
 use cid::Cid;
 use cid_router_core::{
-    Context, cid_filter::{CidFilter, CodeFilter}, crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver}, routes::Route
+    cid_filter::{CidFilter, CodeFilter},
+    crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
+    routes::Route,
+    Context,
 };
 use futures::{Stream, StreamExt};
-use iroh::{Endpoint, NodeAddr, NodeId};
-use iroh_blobs::{get::request::GetBlobItem, ticket::BlobTicket, Hash};
+use iroh::{endpoint::SendStream, Endpoint, NodeAddr, NodeId, SecretKey};
+use iroh_blobs::{
+    get::request::GetBlobItem,
+    protocol::{ChunkRangesSeq, PushRequest, RequestType},
+    store::IROH_BLOCK_SIZE,
+    ticket::BlobTicket,
+    Hash,
+};
+use irpc::util::WriteVarintExt;
+use log::error;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -35,7 +49,7 @@ pub enum IrohNodeAddrRef {
 }
 
 impl IrohCrp {
-    pub async fn new_from_config(config: Value) -> Result<Self> {
+    pub async fn new_from_config(config: Value, secret_key: SecretKey) -> Result<Self> {
         let IrohCrpConfig { node_addr_ref } = serde_json::from_value(config)?;
 
         let node_addr = match node_addr_ref {
@@ -53,7 +67,11 @@ impl IrohCrp {
             }
         };
 
-        let endpoint = Endpoint::builder().discovery_n0().bind().await?;
+        let endpoint = Endpoint::builder()
+            .discovery_n0()
+            .secret_key(secret_key)
+            .bind()
+            .await?;
 
         Ok(Self {
             node_addr,
@@ -91,27 +109,75 @@ impl Crp for IrohCrp {
     }
 }
 
-
 #[async_trait]
 impl BlobWriter for IrohCrp {
     async fn put_blob(
         &self,
         _auth: Option<Bytes>,
         cid: &Cid,
-        data: Pin<
-            Box<
-                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
-                    + Send,
-            >,
-        >
-    ) -> Result<
-        (),
-        Box<dyn std::error::Error + Send + Sync>,
-    > {
-        // TODO
-        println!("Putting blob with cid: {}", cid);
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        error!("Putting blob with cid: {}", cid);
+        error!("I am: {:?}", self.endpoint.node_id());
+        error!("Target: {:?}", self.node_addr.node_id);
+        if !self.allow_put {
+            return Err("Put operations are not allowed on this CRP".into());
+        }
+        if cid.hash().code() != 0x1e {
+            return Err("Unsupported CID hash code; only blake3 is supported".into());
+        }
+        let hash: [u8; 32] = cid
+            .hash()
+            .digest()
+            .try_into()
+            .expect("blake3 hash must be 32 bytes");
+        let hash = iroh_blobs::Hash::from_bytes(hash);
+        error!("Connecting to node...");
+        let conn = self
+            .endpoint
+            .connect(self.node_addr.clone(), iroh_blobs::ALPN)
+            .await?;
+        error!("Connected. Opening stream...");
+        let (mut writer, mut reader) = conn.open_bi().await?;
+        error!("Opened stream. Writing push request...");
+        let request = PushRequest::new(hash, ChunkRangesSeq::root());
+        let request = write_push_request(request, &mut writer).await?;
+        let (hash, bao) = create_n0_bao(data, &ChunkRanges::all())?;
+        if hash != request.hash {
+            return Err("Computed hash does not match requested hash".into());
+        }
+        writer.write_all(&bao).await?;
+        writer.finish()?;
+        let res = reader.read_to_end(1024).await;
+        if let Err(e) = res {
+            error!("Error reading response: {}", e);
+            return Err(Box::new(e));
+        }
+        error!("Blob put completed for cid: {}", cid);
         Ok(())
     }
+}
+
+/// TODO: make this available in iroh-blobs
+async fn write_push_request(
+    request: PushRequest,
+    stream: &mut SendStream,
+) -> anyhow::Result<PushRequest> {
+    let mut request_bytes = Vec::new();
+    request_bytes.push(RequestType::Push as u8);
+    request_bytes.write_length_prefixed(&request).unwrap();
+    stream.write_all(&request_bytes).await?;
+    Ok(request)
+}
+
+/// TODO: move this to iroh-blobs
+pub fn create_n0_bao(data: &[u8], ranges: &ChunkRanges) -> anyhow::Result<(Hash, Vec<u8>)> {
+    let outboard = PreOrderMemOutboard::create(data, IROH_BLOCK_SIZE);
+    let mut encoded = Vec::new();
+    let size = data.len() as u64;
+    encoded.extend_from_slice(&size.to_le_bytes());
+    bao_tree::io::sync::encode_ranges_validated(data, &outboard, ranges, &mut encoded)?;
+    Ok((outboard.root.into(), encoded))
 }
 
 #[async_trait]
