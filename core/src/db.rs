@@ -362,6 +362,7 @@ mod tests {
         Context,
     };
 
+    #[derive(Debug)]
     struct StubAzureProvider {}
 
     #[async_trait]
@@ -382,6 +383,7 @@ mod tests {
             CrpCapabilities {
                 route_resolver: None,
                 size_resolver: None,
+                blob_writer: None,
             }
         }
 
