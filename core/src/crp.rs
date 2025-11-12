@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{fmt::Debug, pin::Pin, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -39,7 +39,7 @@ impl std::fmt::Display for ProviderType {
 
 /// CID Route Provider (CRP) Trait
 #[async_trait]
-pub trait Crp: Send + Sync {
+pub trait Crp: Send + Sync + Debug {
     fn provider_id(&self) -> String;
     fn provider_type(&self) -> ProviderType;
     async fn reindex(&self, cx: &Context) -> Result<()>;
@@ -53,10 +53,32 @@ pub trait Crp: Send + Sync {
     }
 }
 
+#[async_trait]
+impl Crp for Arc<dyn Crp> {
+    fn provider_id(&self) -> String {
+        self.as_ref().provider_id()
+    }
+    fn provider_type(&self) -> ProviderType {
+        self.as_ref().provider_type()
+    }
+    async fn reindex(&self, cx: &Context) -> Result<()> {
+        self.as_ref().reindex(cx).await
+    }
+
+    fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
+        self.as_ref().capabilities()
+    }
+
+    fn cid_filter(&self) -> CidFilter {
+        self.as_ref().cid_filter()
+    }
+}
+
 /// All capabilities a CRP may have represented as self-referential trait objects.
 pub struct CrpCapabilities<'a> {
     pub route_resolver: Option<&'a dyn RouteResolver>,
     pub size_resolver: Option<&'a dyn SizeResolver>,
+    pub blob_writer: Option<&'a dyn BlobWriter>,
 }
 
 /// A RouteResolver can dereference a route, turning it into a stream of bytes, accepting
@@ -88,4 +110,24 @@ pub trait SizeResolver {
         cid: &Cid,
         auth: Vec<u8>,
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
+}
+
+/// A RouteResolver can dereference a route, turning it into a stream of bytes, accepting
+/// authentication data.
+#[async_trait]
+pub trait BlobWriter: Send + Sync {
+    async fn put_blob(
+        &self,
+        auth: Option<bytes::Bytes>,
+        cid: &Cid,
+        data: Pin<
+            Box<
+                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
+                    + Send,
+            >,
+        >
+    ) -> Result<
+        (),
+        Box<dyn std::error::Error + Send + Sync>,
+    >;
 }

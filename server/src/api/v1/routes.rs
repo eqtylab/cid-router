@@ -22,7 +22,7 @@ use http_body::Frame;
 use http_body_util::StreamBody;
 use log::info;
 use serde::{Deserialize, Serialize};
-use utoipa::{openapi::content, IntoParams, ToSchema};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::context::Context;
 
@@ -187,6 +187,7 @@ pub async fn get_data(
 }
 
 /// Create data for a CID
+#[axum::debug_handler]
 pub async fn create_data(
     auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     content_type: Option<TypedHeader<ContentType>>,
@@ -196,6 +197,7 @@ pub async fn create_data(
     let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
     ctx.auth.service().await.authenticate(token).await?;
 
+    // Check if content-type is supported and translate to cid type
     let content_type = content_type.map(|TypedHeader(mime)| mime.to_string());
     let cid_type = match content_type.as_ref().map(|ct| ct.as_str()) {
         None => cid_router_core::cid::Codec::Raw,
@@ -209,6 +211,7 @@ pub async fn create_data(
         }
     };
 
+    // Read data - we assume this to be small enough to fit into memory for now
     let mut buffer = BytesMut::new();
     let mut stream = body.into_data_stream();
     while let Some(chunk) = stream.next().await {
@@ -220,14 +223,46 @@ pub async fn create_data(
         buffer.extend_from_slice(&chunk);
     }
 
+    // compute CID
     let data = buffer.freeze();
     let hash = blake3::hash(&data);
     let cid = blake3_hash_to_cid(hash.into(), cid_type);
 
-    // === 4. TODO: Store `data` using `cid` as key ===
-    // ctx.storage.put(&cid, data).await?; // ← implement this
+    // Find writers
+    let writers = ctx.providers.iter()
+        .filter(|p| p.provider_is_eligible_for_cid(&cid))
+        .filter_map(|p| p.capabilities().blob_writer.map(|w| (p, w))).collect::<Vec<_>>();
+    if writers.is_empty() {
+        return Ok(Response::builder()
+            .status(StatusCode::SERVICE_UNAVAILABLE)
+            .body(Body::empty())?);
+    }
 
-    // === 5. Respond ===
+    let mut outcome = Vec::new();
+    for (id, writer) in writers {
+        let data = data.clone();
+        let res = writer.put_blob(
+            None,
+            &cid,
+            Box::pin(futures::stream::once(async move { Ok(data) })),
+        ).await;
+        outcome.push((id, res));
+    }
+    
+    for (provider, res) in &outcome {
+        if res.is_ok() {
+            let route = cid_router_core::routes::Route::builder(*provider)
+                .cid(cid)
+                .multicodec(cid_router_core::cid::Codec::Raw)
+                .size(data.len() as u64)
+                .url(cid.to_string())
+                .build(&ctx.core)?;
+            ctx.core.db().insert_route(
+                &route
+            ).await?;
+        }
+    }
+
     let json = serde_json::json!({
         "cid": cid.to_string(),
         "size": data.len(),
@@ -242,16 +277,3 @@ pub async fn create_data(
         .unwrap())
 }
 
-/// Put data for a CID
-///
-/// This assumes that the hash is known by the sender, it will be verified.
-pub async fn put_data(
-    Path(cid): Path<String>,
-    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
-    State(ctx): State<Arc<Context>>,
-) -> ApiResult<Response> {
-    // TODO:
-    // - put data to a remote iroh-blobs store via blobs proto
-    // - create route in db
-    todo!();
-}

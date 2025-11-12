@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.dependencies]
 anyhow = "1"
 async-trait = "0.1"
-axum = "0.8"
+axum = { version = "0.8", features = ["macros"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 azure_core = "0.19"
 azure_identity = "0.19"

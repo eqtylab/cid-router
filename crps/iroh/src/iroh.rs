@@ -4,11 +4,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use bao_tree::io::BaoContentItem;
 use bytes::Bytes;
+use cid::Cid;
 use cid_router_core::{
-    cid_filter::{CidFilter, CodeFilter},
-    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
-    routes::Route,
-    Context,
+    Context, cid_filter::{CidFilter, CodeFilter}, crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver}, routes::Route
 };
 use futures::{Stream, StreamExt};
 use iroh::{Endpoint, NodeAddr, NodeId};
@@ -20,6 +18,7 @@ use serde_json::Value;
 pub struct IrohCrp {
     node_addr: NodeAddr,
     endpoint: Endpoint,
+    allow_put: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +58,7 @@ impl IrohCrp {
         Ok(Self {
             node_addr,
             endpoint,
+            allow_put: true,
         })
     }
 }
@@ -75,18 +75,42 @@ impl Crp for IrohCrp {
 
     async fn reindex(&self, _cx: &Context) -> anyhow::Result<()> {
         // TODO: Implement reindexing logic
-        todo!();
+        Ok(())
     }
 
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
             size_resolver: None, // TODO
+            blob_writer: if self.allow_put { Some(self) } else { None },
         }
     }
 
     fn cid_filter(&self) -> CidFilter {
         CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x1e)) // blake3
+    }
+}
+
+
+#[async_trait]
+impl BlobWriter for IrohCrp {
+    async fn put_blob(
+        &self,
+        _auth: Option<Bytes>,
+        cid: &Cid,
+        data: Pin<
+            Box<
+                dyn Stream<Item = Result<bytes::Bytes, Box<dyn std::error::Error + Send + Sync>>>
+                    + Send,
+            >,
+        >
+    ) -> Result<
+        (),
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        // TODO
+        println!("Putting blob with cid: {}", cid);
+        Ok(())
     }
 }
 
