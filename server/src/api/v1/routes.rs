@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::{collections::HashSet, str::FromStr, sync::Arc};
 
 use api_utils::ApiResult;
 use axum::{
@@ -20,7 +20,7 @@ use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use log::info;
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -241,11 +241,21 @@ pub async fn create_data(
             .body(Body::empty())?);
     }
 
+    let existing = ctx.core.db().routes_for_cid(cid).await?;
+    let existing_ids = existing
+        .iter()
+        .map(|r| r.provider_id.clone())
+        .collect::<HashSet<_>>();
+
     let mut outcome = Vec::new();
-    for (id, writer) in writers {
+    for (crp, writer) in writers {
+        if existing_ids.contains(&crp.provider_id()) {
+            error!("Skipping put to provider {} as route already exists", crp.provider_id());
+            continue;
+        }
         let data = data.clone();
         let res = writer.put_blob(None, &cid, &data).await;
-        outcome.push((id, res));
+        outcome.push((crp, res));
     }
 
     for (provider, res) in &outcome {

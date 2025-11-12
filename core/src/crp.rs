@@ -116,6 +116,12 @@ pub trait SizeResolver {
 /// authentication data.
 #[async_trait]
 pub trait BlobWriter: Send + Sync {
+
+    /// Puts a blob into the CRP, given optional authentication data, a CID, and the data bytes.
+    /// 
+    /// Note that this assumes that the data fits in memory, which is probably the case for most
+    /// data that eqty wants to write. If this becomes a problem, we will add a second method that
+    /// takes a stream of bytes instead.
     async fn put_blob(
         &self,
         auth: Option<bytes::Bytes>,
