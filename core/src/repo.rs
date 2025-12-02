@@ -39,7 +39,7 @@ impl Repo {
 
     async fn create_key(&self) -> Result<SecretKey> {
         let key_file_path = self.0.join(Self::KEY_FILE);
-        let key = SecretKey::generate(rand::rngs::OsRng);
+        let key = SecretKey::generate(&mut rand::rng());
         tokio::fs::write(key_file_path, key.to_bytes()).await?;
         Ok(key)
     }

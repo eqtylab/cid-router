@@ -11,14 +11,14 @@ use cid_router_core::{
     Context,
 };
 use futures::{Stream, StreamExt};
-use iroh::{Endpoint, NodeAddr, NodeId};
+use iroh::{Endpoint, EndpointAddr, EndpointId};
 use iroh_blobs::{get::request::GetBlobItem, ticket::BlobTicket, Hash};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug)]
 pub struct IrohCrp {
-    node_addr: NodeAddr,
+    addr: EndpointAddr,
     endpoint: Endpoint,
 }
 
@@ -30,8 +30,8 @@ pub struct IrohCrpConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IrohNodeAddrRef {
-    NodeId(String),
-    NodeTicket(String),
+    EndpointId(String),
+    EndpointTicket(String),
     Ticket(String),
 }
 
@@ -39,25 +39,25 @@ impl IrohCrp {
     pub async fn new_from_config(config: Value) -> Result<Self> {
         let IrohCrpConfig { node_addr_ref } = serde_json::from_value(config)?;
 
-        let node_addr = match node_addr_ref {
-            IrohNodeAddrRef::NodeId(node_id) => {
-                let node_id = NodeId::from_str(&node_id)?;
-                NodeAddr::from(node_id)
+        let endpoint_addr = match node_addr_ref {
+            IrohNodeAddrRef::EndpointId(node_id) => {
+                let endpoint_id = EndpointId::from_str(&node_id)?;
+                EndpointAddr::from(endpoint_id)
             }
-            IrohNodeAddrRef::NodeTicket(ticket) => {
-                let ticket = iroh_base::ticket::NodeTicket::from_str(&ticket)?;
-                ticket.node_addr().to_owned()
+            IrohNodeAddrRef::EndpointTicket(ticket) => {
+                let ticket = iroh_tickets::endpoint::EndpointTicket::from_str(&ticket)?;
+                ticket.endpoint_addr().to_owned()
             }
             IrohNodeAddrRef::Ticket(ticket) => {
                 let ticket = BlobTicket::from_str(&ticket)?;
-                ticket.node_addr().clone()
+                ticket.addr().clone()
             }
         };
 
-        let endpoint = Endpoint::builder().discovery_n0().bind().await?;
+        let endpoint = Endpoint::bind().await?;
 
         Ok(Self {
-            node_addr,
+            addr: endpoint_addr,
             endpoint,
         })
     }
@@ -105,7 +105,7 @@ impl RouteResolver for IrohCrp {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
-        let Self { node_addr, .. } = self;
+        let Self { addr, .. } = self;
         let cid = route.cid;
 
         let hash = cid.hash().digest();
@@ -114,10 +114,10 @@ impl RouteResolver for IrohCrp {
 
         let conn = self
             .endpoint
-            .connect(node_addr.clone(), iroh_blobs::ALPN)
+            .connect(addr.clone(), iroh_blobs::ALPN)
             .await?;
 
-        println!("get {:?} from {}", hash, node_addr.node_id.fmt_short());
+        println!("get {:?} from {}", hash, addr.id.fmt_short());
 
         let res = iroh_blobs::get::request::get_blob(conn, hash);
         let res = res

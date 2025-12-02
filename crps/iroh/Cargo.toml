@@ -17,6 +17,7 @@ futures.workspace = true
 iroh.workspace = true
 iroh-base.workspace = true
 iroh-blobs.workspace = true
+iroh-tickets.workspace = true
 n0-future.workspace = true
 serde.workspace = true
 serde_json.workspace = true
