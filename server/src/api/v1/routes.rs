@@ -9,7 +9,6 @@ use axum::{
     Json,
 };
 use axum_extra::extract::TypedHeader;
-use bao_tree::blake3;
 use bytes::BytesMut;
 use cid::Cid;
 use cid_router_core::{

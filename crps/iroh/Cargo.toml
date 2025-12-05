@@ -9,7 +9,6 @@ edition = "2021"
 
 anyhow.workspace = true
 async-trait.workspace = true
-bao-tree.workspace = true
 bytes.workspace = true
 cid.workspace = true
 cid-router-core = { path = "../../core" }
