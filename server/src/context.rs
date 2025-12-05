@@ -26,24 +26,20 @@ impl Context {
         let port = config.port;
 
         let auth = config.auth.clone();
-
-        let secret = repo.secret_key().await?;
         let core = cid_router_core::context::Context::from_repo(repo).await?;
 
-        let providers = future::join_all(config.providers.into_iter().map(|provider_config| {
-            let secret = secret.clone();
-            async move {
+        let providers = future::join_all(config.providers.into_iter().map(
+            |provider_config| async move {
                 match provider_config {
-                    ProviderConfig::Iroh(iroh_config) => Ok(Arc::new(
-                        IrohCrp::new_from_config(serde_json::to_value(iroh_config)?, secret)
-                            .await?,
-                    ) as Arc<dyn Crp>),
+                    ProviderConfig::Iroh(iroh_config) => {
+                        Ok(Arc::new(IrohCrp::new_from_config(iroh_config).await?) as Arc<dyn Crp>)
+                    }
                     ProviderConfig::Azure(azure_config) => {
                         Ok(Arc::new(AzureContainer::new(azure_config)) as Arc<dyn Crp>)
                     }
                 }
-            }
-        }))
+            },
+        ))
         .await
         .into_iter()
         .collect::<Result<Vec<_>>>()?;

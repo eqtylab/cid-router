@@ -250,7 +250,10 @@ pub async fn create_data(
     let mut outcome = Vec::new();
     for (crp, writer) in writers {
         if existing_ids.contains(&crp.provider_id()) {
-            error!("Skipping put to provider {} as route already exists", crp.provider_id());
+            error!(
+                "Skipping put to provider {} as route already exists",
+                crp.provider_id()
+            );
             continue;
         }
         let data = data.clone();
