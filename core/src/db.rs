@@ -382,7 +382,6 @@ mod tests {
         fn capabilities(&self) -> CrpCapabilities<'_> {
             CrpCapabilities {
                 route_resolver: None,
-                size_resolver: None,
                 blob_writer: None,
             }
         }

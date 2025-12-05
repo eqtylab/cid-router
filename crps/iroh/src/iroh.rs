@@ -57,7 +57,6 @@ impl Crp for IrohCrp {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            size_resolver: None, // TODO
             blob_writer: Some(self),
         }
     }
