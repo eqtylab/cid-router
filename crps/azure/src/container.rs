@@ -48,7 +48,7 @@ impl Crp for Container {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            blob_writer: None,   // TODO
+            blob_writer: None, // TODO
         }
     }
 

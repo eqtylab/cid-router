@@ -12,6 +12,7 @@ use cid_router_core::{
 };
 use futures::Stream;
 use iroh_blobs::Hash;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
@@ -42,7 +43,7 @@ impl IrohCrp {
 #[async_trait]
 impl Crp for IrohCrp {
     fn provider_id(&self) -> String {
-        "iroh_inline".to_string()
+        "iroh".to_string()
     }
 
     fn provider_type(&self) -> ProviderType {
@@ -99,6 +100,7 @@ impl RouteResolver for IrohCrp {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
+        error!("IrohCrp::get_bytes for route: {:?}", route);
         let cid = route.cid;
         let hash = cid.hash().digest();
         let hash: [u8; 32] = hash.try_into()?;

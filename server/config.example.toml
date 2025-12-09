@@ -3,4 +3,4 @@ auth = "none"
 
 [[providers]]
 type = "iroh"
-path = "/Users/rklaehn/projects_git/cid_router/blobs"
+path = "/Users/rklaehn/projects_git/cid-router/blobs"

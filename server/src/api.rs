@@ -21,6 +21,8 @@ use crate::context::Context;
     paths(
         v1::routes::get_routes,
         v1::status::get_status,
+        v1::data::create_data,
+        v1::data::get_data,
     ),
     components(
         schemas(
@@ -61,8 +63,8 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
         )
         .route("/v1/routes", get(v1::routes::list_routes))
         .route("/v1/routes/{cid}", get(v1::routes::get_routes))
-        .route("/v1/data", post(v1::routes::create_data))
-        .route("/v1/data/{cid}", get(v1::routes::get_data))
+        .route("/v1/data", post(v1::data::create_data))
+        .route("/v1/data/{cid}", get(v1::data::get_data))
         .with_state(ctx);
 
     let listener = TcpListener::bind(addr).await?;
