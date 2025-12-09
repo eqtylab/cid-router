@@ -29,6 +29,7 @@ use crate::context::Context;
             v1::routes::RoutesResponse,
             v1::routes::Route,
             v1::status::StatusResponse,
+            v1::data::CreateDataResponse,
             // routes::AzureBlobStorageRouteMethod,
             // routes::UrlRouteMethod,
             // routes::IpfsRouteMethod,

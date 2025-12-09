@@ -11,14 +11,14 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::cid::blake3_hash_to_cid;
+use cid_router_core::cid::{Codec, blake3_hash_to_cid};
 use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;
 use http_body_util::StreamBody;
 use log::info;
 use serde::Serialize;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 
 use crate::context::Context;
 
@@ -31,7 +31,8 @@ use crate::context::Context;
         ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
     ),
     responses(
-        (status = 200, description = "Get data for a CID")
+        (status = 200, description = "Get raw data for a CID", content_type = "application/octet-stream"),
+        (status = 404, description = "No route found for CID")
     )
 )]
 pub async fn get_data(
@@ -39,9 +40,13 @@ pub async fn get_data(
     auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Response> {
-    // TODO - remove unwraps
-    let cid = Cid::from_str(&cid).unwrap();
-    let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
+    let cid = Cid::from_str(&cid).map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let routes = ctx.core.db().routes_for_cid(cid).await.map_err(|e| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to fetch routes for cid {}: {}", cid, e),
+        )
+    })?;
     let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
     let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
     ctx.auth.service().await.authenticate(token).await?;
@@ -55,7 +60,15 @@ pub async fn get_data(
             .find(|p| provider_id == p.provider_id() && route.provider_type == p.provider_type())
         {
             if let Some(route_resolver) = provider.capabilities().route_resolver {
-                let stream = route_resolver.get_bytes(&route, None).await.unwrap();
+                let stream = route_resolver.get_bytes(&route, None).await.map_err(|e| {
+                    ApiError::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!(
+                            "Failed to get bytes for cid {} from provider {}: {}",
+                            cid, provider_id, e
+                        ),
+                    )
+                })?;
 
                 // Convert Stream<Item = Bytes> into a response body
                 let body = StreamBody::new(
@@ -93,7 +106,9 @@ pub struct CreateDataResponse {
         ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
     ),
     responses(
-        (status = 200, description = "Get data for a CID", body = CreateDataResponse)
+        (status = 200, description = "Get data for a CID", body = CreateDataResponse),
+        (status = 415, description = "Unsupported content-type"),
+        (status = 503, description = "No eligible writers found for CID"),
     )
 )]
 #[axum::debug_handler]
@@ -109,10 +124,10 @@ pub async fn create_data(
     // Check if content-type is supported and translate to cid type
     let content_type = content_type.map(|TypedHeader(mime)| mime.to_string());
     let cid_type = match content_type.as_ref().map(|ct| ct.as_str()) {
-        None => cid_router_core::cid::Codec::Raw,
-        Some("application/x-www-form-urlencoded") => cid_router_core::cid::Codec::Raw,
-        Some("application/octet-stream") => cid_router_core::cid::Codec::Raw,
-        Some("application/vnd.ipld.dag-cbor") => cid_router_core::cid::Codec::DagCbor,
+        None => Codec::Raw,
+        Some("application/x-www-form-urlencoded") => Codec::Raw,
+        Some("application/octet-stream") => Codec::Raw,
+        Some("application/vnd.ipld.dag-cbor") => Codec::DagCbor,
         _ => {
             return Err(ApiError::new(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,

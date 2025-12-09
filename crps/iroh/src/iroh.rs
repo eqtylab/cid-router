@@ -12,7 +12,7 @@ use cid_router_core::{
 };
 use futures::Stream;
 use iroh_blobs::Hash;
-use log::error;
+use log::info;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ impl RouteResolver for IrohCrp {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
-        error!("IrohCrp::get_bytes for route: {:?}", route);
+        info!("get_bytes for route: {:?}", route);
         let cid = route.cid;
         let hash = cid.hash().digest();
         let hash: [u8; 32] = hash.try_into()?;
