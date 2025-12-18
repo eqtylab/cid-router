@@ -2,19 +2,15 @@ use std::{str::FromStr, sync::Arc};
 
 use api_utils::ApiResult;
 use axum::{
-    body::Body,
     extract::{Path, Query, State},
-    http::{header, StatusCode},
-    response::Response,
     Json,
 };
 use axum_extra::extract::TypedHeader;
 use cid::Cid;
-use cid_router_core::db::{Direction, OrderBy};
-use futures::StreamExt;
+use cid_router_core::{
+    db::{Direction, OrderBy},
+};
 use headers::Authorization;
-use http_body::Frame;
-use http_body_util::StreamBody;
 use log::info;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -124,59 +120,4 @@ pub async fn get_routes(
     let routes = routes.into_iter().map(Route::from).collect();
 
     Ok(Json(RoutesResponse { routes }))
-}
-
-/// Get a data stream for a CID
-#[utoipa::path(
-    get,
-    path = "/v1/data/{cid}",
-    tag = "/v1/data/{cid}",
-    params(
-        ("authorization" = Option<String>, Header, description = "Bearer token for authentication")
-    ),
-    responses(
-        (status = 200, description = "Get data for a CID", body = RoutesResponse)
-    )
-)]
-pub async fn get_data(
-    Path(cid): Path<String>,
-    auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
-    State(ctx): State<Arc<Context>>,
-) -> ApiResult<Response> {
-    // TODO - remove unwraps
-    let cid = Cid::from_str(&cid).unwrap();
-    let routes = ctx.core.db().routes_for_cid(cid).await.unwrap();
-    let routes: Vec<cid_router_core::routes::Route> = routes.into_iter().collect();
-    let token = auth.map(|TypedHeader(Authorization(bearer))| bearer.token().to_string());
-    ctx.auth.service().await.authenticate(token).await?;
-
-    for route in routes {
-        // iterate through providers until you find a match on provider_id and provider_type
-        let provider_id: String = route.provider_id.clone();
-        if let Some(provider) = ctx
-            .providers
-            .iter()
-            .find(|p| provider_id == p.provider_id() && route.provider_type == p.provider_type())
-        {
-            if let Some(route_resolver) = provider.capabilities().route_resolver {
-                let stream = route_resolver.get_bytes(&route, None).await.unwrap();
-
-                // Convert Stream<Item = Bytes> into a response body
-                let body = StreamBody::new(
-                    stream.map(|result| result.map(Frame::data).map_err(std::io::Error::other)),
-                );
-
-                return Ok(Response::builder()
-                    .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, "application/octet-stream")
-                    .body(Body::new(body))
-                    .unwrap());
-            }
-        }
-    }
-
-    Ok(Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(Body::empty())
-        .unwrap())
 }

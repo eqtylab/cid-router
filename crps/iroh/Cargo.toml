@@ -9,7 +9,6 @@ edition = "2021"
 
 anyhow.workspace = true
 async-trait.workspace = true
-bao-tree.workspace = true
 bytes.workspace = true
 cid.workspace = true
 cid-router-core = { path = "../../core" }
@@ -17,8 +16,9 @@ futures.workspace = true
 iroh.workspace = true
 iroh-base.workspace = true
 iroh-blobs.workspace = true
-iroh-tickets.workspace = true
 n0-future.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+irpc.workspace = true
+log.workspace = true

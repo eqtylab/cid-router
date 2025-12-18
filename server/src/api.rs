@@ -3,7 +3,12 @@ pub mod v1;
 use std::sync::Arc;
 
 use anyhow::Result;
-use axum::{response::Redirect, routing::get, Router};
+use axum::{
+    response::Redirect,
+    routing::{get, post},
+    Router,
+};
+use cid_router_core::context::Signer;
 use log::info;
 use tokio::net::TcpListener;
 use utoipa::OpenApi;
@@ -16,12 +21,15 @@ use crate::context::Context;
     paths(
         v1::routes::get_routes,
         v1::status::get_status,
+        v1::data::create_data,
+        v1::data::get_data,
     ),
     components(
         schemas(
             v1::routes::RoutesResponse,
             v1::routes::Route,
             v1::status::StatusResponse,
+            v1::data::CreateDataResponse,
             // routes::AzureBlobStorageRouteMethod,
             // routes::UrlRouteMethod,
             // routes::IpfsRouteMethod,
@@ -42,6 +50,7 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
 
     info!("🚀 Starting CID Router");
     info!("🚀 HTTP API = {addr}");
+    info!("🚀 ID = {}", ctx.core.public_key());
 
     let router = Router::new()
         .merge(
@@ -55,7 +64,8 @@ pub async fn start(ctx: Arc<Context>) -> Result<()> {
         )
         .route("/v1/routes", get(v1::routes::list_routes))
         .route("/v1/routes/{cid}", get(v1::routes::get_routes))
-        .route("/v1/data/{cid}", get(v1::routes::get_data))
+        .route("/v1/data", post(v1::data::create_data))
+        .route("/v1/data/{cid}", get(v1::data::get_data))
         .with_state(ctx);
 
     let listener = TcpListener::bind(addr).await?;

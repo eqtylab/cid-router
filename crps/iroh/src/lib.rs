@@ -1,3 +1,3 @@
 mod iroh;
 
-pub use iroh::{IrohCrp, IrohCrpConfig, IrohNodeAddrRef};
+pub use iroh::{IrohCrp, IrohCrpConfig};

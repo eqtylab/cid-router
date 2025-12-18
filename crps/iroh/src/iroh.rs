@@ -1,65 +1,42 @@
-use std::{pin::Pin, str::FromStr};
+use std::{io, path::PathBuf, pin::Pin};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bao_tree::io::BaoContentItem;
 use bytes::Bytes;
+use cid::Cid;
 use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
-    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
+    crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     routes::Route,
     Context,
 };
-use futures::{Stream, StreamExt};
-use iroh::{Endpoint, EndpointAddr, EndpointId};
-use iroh_blobs::{get::request::GetBlobItem, ticket::BlobTicket, Hash};
+use futures::Stream;
+use iroh_blobs::Hash;
+use log::info;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IrohCrp {
-    addr: EndpointAddr,
-    endpoint: Endpoint,
+    store: iroh_blobs::store::fs::FsStore,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IrohCrpConfig {
-    pub node_addr_ref: IrohNodeAddrRef,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum IrohNodeAddrRef {
-    EndpointId(String),
-    EndpointTicket(String),
-    Ticket(String),
+    /// Path to the directory where blobs are stored
+    pub path: PathBuf,
 }
 
 impl IrohCrp {
-    pub async fn new_from_config(config: Value) -> Result<Self> {
-        let IrohCrpConfig { node_addr_ref } = serde_json::from_value(config)?;
-
-        let endpoint_addr = match node_addr_ref {
-            IrohNodeAddrRef::EndpointId(node_id) => {
-                let endpoint_id = EndpointId::from_str(&node_id)?;
-                EndpointAddr::from(endpoint_id)
-            }
-            IrohNodeAddrRef::EndpointTicket(ticket) => {
-                let ticket = iroh_tickets::endpoint::EndpointTicket::from_str(&ticket)?;
-                ticket.endpoint_addr().to_owned()
-            }
-            IrohNodeAddrRef::Ticket(ticket) => {
-                let ticket = BlobTicket::from_str(&ticket)?;
-                ticket.addr().clone()
-            }
+    pub async fn new_from_config(config: IrohCrpConfig) -> io::Result<Self> {
+        let path = if config.path.is_absolute() {
+            config.path
+        } else {
+            std::env::current_dir()?.join(config.path)
         };
-
-        let endpoint = Endpoint::bind().await?;
-
-        Ok(Self {
-            addr: endpoint_addr,
-            endpoint,
-        })
+        let store = iroh_blobs::store::fs::FsStore::load(path)
+            .await
+            .map_err(|e| io::Error::other(e))?;
+        Ok(Self { store })
     }
 }
 
@@ -75,18 +52,36 @@ impl Crp for IrohCrp {
 
     async fn reindex(&self, _cx: &Context) -> anyhow::Result<()> {
         // TODO: Implement reindexing logic
-        todo!();
+        Ok(())
     }
 
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            size_resolver: None, // TODO
+            blob_writer: Some(self),
         }
     }
 
     fn cid_filter(&self) -> CidFilter {
         CidFilter::MultihashCodeFilter(CodeFilter::Eq(0x1e)) // blake3
+    }
+}
+
+#[async_trait]
+impl BlobWriter for IrohCrp {
+    async fn put_blob(
+        &self,
+        _auth: Option<Bytes>,
+        cid: &Cid,
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let blobs = self.store.blobs().clone();
+        let data = Bytes::copy_from_slice(data);
+        if cid.hash().code() != 0x1e {
+            return Err("Unsupported CID hash code; only blake3 is supported".into());
+        }
+        blobs.add_bytes(data).with_tag().await.map_err(Box::new)?;
+        Ok(())
     }
 }
 
@@ -105,39 +100,13 @@ impl RouteResolver for IrohCrp {
         >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
-        let Self { addr, .. } = self;
+        info!("get_bytes for route: {:?}", route);
         let cid = route.cid;
-
         let hash = cid.hash().digest();
         let hash: [u8; 32] = hash.try_into()?;
         let hash = Hash::from_bytes(hash);
-
-        let conn = self
-            .endpoint
-            .connect(addr.clone(), iroh_blobs::ALPN)
-            .await?;
-
-        println!("get {:?} from {}", hash, addr.id.fmt_short());
-
-        let res = iroh_blobs::get::request::get_blob(conn, hash);
-        let res = res
-            .take_while(|item| n0_future::future::ready(!matches!(item, GetBlobItem::Done(_))))
-            .filter_map(|item| {
-                n0_future::future::ready(match item {
-                    GetBlobItem::Item(item) => match item {
-                        BaoContentItem::Leaf(leaf) => Some(Ok(leaf.data)),
-                        // TODO - I don't think this is right. returning None here
-                        // will likely end the stream prematurely
-                        BaoContentItem::Parent(_parent) => None,
-                    },
-                    // This is filtered out, only for compiler happiness
-                    GetBlobItem::Done(_stats) => None,
-                    GetBlobItem::Error(err) => Some(Err(
-                        Box::new(err) as Box<dyn std::error::Error + Send + Sync>
-                    )),
-                })
-            });
-
-        Ok(Box::pin(res))
+        let data = self.store.blobs().get_bytes(hash).await.map_err(Box::new)?;
+        let stream = futures::stream::once(async move { Ok(data) });
+        Ok(Box::pin(stream))
     }
 }
