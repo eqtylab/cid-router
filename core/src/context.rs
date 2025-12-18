@@ -34,7 +34,7 @@ impl Context {
 
     pub async fn mem() -> Result<Self> {
         let db = Db::new_in_memory().await?;
-        let key = SecretKey::generate(rand::rngs::OsRng);
+        let key = SecretKey::generate(&mut rand::rng());
         let inner = Inner { db, key };
 
         Ok(Self {
