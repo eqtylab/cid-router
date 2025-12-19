@@ -7,9 +7,7 @@ use axum::{
 };
 use axum_extra::extract::TypedHeader;
 use cid::Cid;
-use cid_router_core::{
-    db::{Direction, OrderBy},
-};
+use cid_router_core::db::{Direction, OrderBy};
 use headers::Authorization;
 use log::info;
 use serde::{Deserialize, Serialize};
