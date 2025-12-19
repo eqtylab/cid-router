@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use futures::Stream;
+use crate::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::{cid_filter::CidFilter, routes::Route, Context};
@@ -113,5 +114,5 @@ pub trait BlobWriter: Send + Sync {
         auth: Option<bytes::Bytes>,
         cid: &Cid,
         data: &[u8],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>>;
 }

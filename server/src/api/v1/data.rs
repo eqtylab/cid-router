@@ -11,7 +11,7 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::cid::{blake3_hash_to_cid, Codec};
+use cid_router_core::{cid::{Codec, blake3_hash_to_cid}, db::{Direction, OrderBy}};
 use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;
@@ -190,13 +190,14 @@ pub async fn create_data(
     }
 
     for (provider, res) in &outcome {
-        if res.is_ok() {
+        if let Ok(url) = res {
             let route = cid_router_core::routes::Route::builder(*provider)
                 .cid(cid)
                 .multicodec(cid_router_core::cid::Codec::Raw)
                 .size(data.len() as u64)
-                .url(cid.to_string())
+                .url(url.to_string())
                 .build(&ctx.core)?;
+            println!("Inserting route: {:?}", route);
             ctx.core.db().insert_route(&route).await?;
         }
     }

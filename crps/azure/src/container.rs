@@ -15,6 +15,7 @@ use cid_router_core::{
     crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
+    Url,
 };
 use futures::{Stream, StreamExt};
 use log::info;
@@ -64,19 +65,20 @@ impl BlobWriter for Container {
         _auth: Option<bytes::Bytes>,
         cid: &Cid,
         data: &[u8],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>> {
         if !self.cfg.writeable {
             return Err("Container is not writeable".into());
         }
-        println!("Uploading blob for cid {}...", cid);
+        info!("Uploading blob for cid {}...", cid);
         let name = cid.to_string();
         let blob_client = self.client.blob_client(&name);
         blob_client
             .put_block_blob(data.to_vec())
             .content_type("application/octet-stream")
             .await?;
-
-        Ok(())
+        let url = self.name_to_route_url(&name);
+        info!("Upload successful! Blob URL: {}", url);
+        Ok(Url::parse(&url).unwrap())
     }
 }
 
@@ -194,11 +196,15 @@ impl Container {
         Ok(())
     }
 
-    fn blob_to_route_url(&self, blob: &Blob) -> String {
+    fn name_to_route_url(&self, name: &str) -> String {
         format!(
             "https://{}.blob.core.windows.net/{}/{}",
-            self.cfg.account, self.cfg.container, blob.name
+            self.cfg.account, self.cfg.container, name
         )
+    }
+
+    fn blob_to_route_url(&self, blob: &Blob) -> String {
+        self.name_to_route_url(&blob.name)
     }
 
     fn route_url_to_name(url: &str) -> Result<String> {
