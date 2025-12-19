@@ -18,12 +18,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone)]
 pub struct IrohCrp {
     store: iroh_blobs::store::fs::FsStore,
+    writeable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IrohCrpConfig {
     /// Path to the directory where blobs are stored
     pub path: PathBuf,
+    /// Whether the CRP should be writeable
+    #[serde(default)]
+    pub writeable: bool,
 }
 
 impl IrohCrp {
@@ -36,7 +40,10 @@ impl IrohCrp {
         let store = iroh_blobs::store::fs::FsStore::load(path)
             .await
             .map_err(|e| io::Error::other(e))?;
-        Ok(Self { store })
+        Ok(Self {
+            store,
+            writeable: config.writeable,
+        })
     }
 }
 
@@ -58,7 +65,7 @@ impl Crp for IrohCrp {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            blob_writer: Some(self),
+            blob_writer: if self.writeable { Some(self) } else { None },
         }
     }
 
@@ -75,6 +82,11 @@ impl BlobWriter for IrohCrp {
         cid: &Cid,
         data: &[u8],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if !self.writeable {
+            // this should not happen because we don't hand out the BlobWriter
+            //capability if not writable.
+            return Err("CRP is not writable".into());
+        }
         let blobs = self.store.blobs().clone();
         let data = Bytes::copy_from_slice(data);
         if cid.hash().code() != 0x1e {
