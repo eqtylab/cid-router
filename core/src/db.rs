@@ -116,7 +116,7 @@ impl Db {
             route.id.to_string(),
             created,
             verified_at,
-            route.provider_type.to_string(),
+            route.provider_id.to_string(),
             route.provider_type.to_string(),
             route.url,
             route.cid.to_bytes(),
