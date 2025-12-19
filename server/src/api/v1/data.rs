@@ -11,7 +11,7 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::{cid::{Codec, blake3_hash_to_cid}};
+use cid_router_core::cid::{blake3_hash_to_cid, Codec};
 use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;

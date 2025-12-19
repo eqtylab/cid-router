@@ -8,8 +8,7 @@ use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
     crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     routes::Route,
-    Context,
-    Url,
+    Context, Url,
 };
 use futures::Stream;
 use iroh_blobs::Hash;

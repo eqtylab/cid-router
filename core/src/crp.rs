@@ -1,10 +1,10 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc};
 
+use crate::Url;
 use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use futures::Stream;
-use crate::Url;
 use serde::{Deserialize, Serialize};
 
 use crate::{cid_filter::CidFilter, routes::Route, Context};

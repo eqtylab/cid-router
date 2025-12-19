@@ -9,13 +9,12 @@ use azure_storage_blobs::{blob::Blob, prelude::*};
 use bytes::Bytes;
 use cid::Cid;
 use cid_router_core::{
-    Context,
+    Context, Url,
     cid::{Codec, blake3_hash_to_cid},
     cid_filter::CidFilter,
     crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
-    Url,
 };
 use futures::{Stream, StreamExt};
 use log::info;
