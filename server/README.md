@@ -35,13 +35,9 @@ Options:
 
 ```present cat config.example.toml
 port = 3080
-
-# [[providers]]
-# type = "ipfs"
-# gateway_url = "http://localhost:8080"
+auth = "none"
 
 [[providers]]
 type = "iroh"
-# node_addr_ref = { node_id = "w36hbmld67hrocfllnfca4ahzae2ibrom2moj2lovjguye3gkmiq" }
-node_addr_ref = { ticket = "blobaccbd3d6iyowiix4ixt5btbxndo5mamzbhcbfksn55krurogsrgbwajdnb2hi4dthixs65ltmuys2mjoojswyylzfzuxe33ifzxgk5dxn5zgwlrpauaesa732pf6aaqavqiqaaol4abablataaa4xyacacwboaabzpqaeagavaafbs7aaiax3vlpwtrmwr4owttczv6g4pglwz26xxj4bgovjfcmvus7awi6dda" }
+path = "/Users/rklaehn/projects_git/cid-router/blobs"
 ```
