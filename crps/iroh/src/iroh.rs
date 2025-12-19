@@ -40,7 +40,10 @@ impl IrohCrp {
         let store = iroh_blobs::store::fs::FsStore::load(path)
             .await
             .map_err(|e| io::Error::other(e))?;
-        Ok(Self { store, writeable: config.writeable })
+        Ok(Self {
+            store,
+            writeable: config.writeable,
+        })
     }
 }
 
