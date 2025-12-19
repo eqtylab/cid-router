@@ -11,7 +11,7 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::{cid::{Codec, blake3_hash_to_cid}, db::{Direction, OrderBy}};
+use cid_router_core::{cid::{Codec, blake3_hash_to_cid}};
 use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;
@@ -197,7 +197,6 @@ pub async fn create_data(
                 .size(data.len() as u64)
                 .url(url.to_string())
                 .build(&ctx.core)?;
-            println!("Inserting route: {:?}", route);
             ctx.core.db().insert_route(&route).await?;
         }
     }

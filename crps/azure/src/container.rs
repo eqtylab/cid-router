@@ -288,6 +288,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
+    #[ignore]
     async fn create_data() -> anyhow::Result<()> {
         let account = std::env::var("AZURE_STORAGE_ACCOUNT")
             .expect("Set AZURE_STORAGE_ACCOUNT env var for this test");
