@@ -11,7 +11,7 @@ use axum::{
 use axum_extra::extract::TypedHeader;
 use bytes::BytesMut;
 use cid::Cid;
-use cid_router_core::cid::{Codec, blake3_hash_to_cid};
+use cid_router_core::cid::{blake3_hash_to_cid, Codec};
 use futures::StreamExt;
 use headers::{Authorization, ContentType};
 use http_body::Frame;
@@ -40,7 +40,8 @@ pub async fn get_data(
     auth: Option<TypedHeader<Authorization<headers::authorization::Bearer>>>,
     State(ctx): State<Arc<Context>>,
 ) -> ApiResult<Response> {
-    let cid = Cid::from_str(&cid).map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let cid =
+        Cid::from_str(&cid).map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let routes = ctx.core.db().routes_for_cid(cid).await.map_err(|e| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
