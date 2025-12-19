@@ -12,10 +12,10 @@ api-utils = { path = "../crates/api-utils" }
 async-trait.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
+blake3.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 cid.workspace = true
-blake3.workspace = true
 cid-router-core = { path = "../core" }
 clap.workspace = true
 crp-azure = { path = "../crps/azure" }
