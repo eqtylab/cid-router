@@ -48,11 +48,7 @@ impl Crp for Container {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            blob_writer: if self.cfg.writeable {
-                Some(self)
-            } else {
-                None
-            },
+            blob_writer: if self.cfg.writeable { Some(self) } else { None },
         }
     }
 
@@ -63,14 +59,24 @@ impl Crp for Container {
 
 #[async_trait]
 impl BlobWriter for Container {
-
     async fn put_blob(
         &self,
-        auth: Option<bytes::Bytes>,
+        _auth: Option<bytes::Bytes>,
         cid: &Cid,
         data: &[u8],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        todo!()
+        if !self.cfg.writeable {
+            return Err("Container is not writeable".into());
+        }
+        println!("Uploading blob for cid {}...", cid);
+        let name = cid.to_string();
+        let blob_client = self.client.blob_client(&name);
+        blob_client
+            .put_block_blob(data.to_vec())
+            .content_type("application/octet-stream")
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -138,7 +144,13 @@ impl Container {
                 ));
                 StorageCredentials::token_credential(credential)
             }
-            None => StorageCredentials::anonymous(),
+            None => {
+                if let Ok(key) = std::env::var("AZURE_STORAGE_ACCESS_KEY") {
+                    StorageCredentials::access_key(account.as_str(), key)
+                } else {
+                    StorageCredentials::anonymous()
+                }
+            }
         };
         let client = BlobServiceClient::new(account, credentials);
         let client = client.container_client(container);
@@ -258,5 +270,61 @@ impl Container {
 
         let cid = blake3_hash_to_cid(hash.into(), Codec::Raw);
         Ok(cid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use azure_storage::StorageCredentials;
+    use azure_storage_blobs::prelude::*;
+    use cid::Cid;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn create_data() -> anyhow::Result<()> {
+        let account = std::env::var("AZURE_STORAGE_ACCOUNT")
+            .expect("Set AZURE_STORAGE_ACCOUNT env var for this test");
+        let access_key = std::env::var("AZURE_STORAGE_ACCESS_KEY")
+            .expect("Set AZURE_STORAGE_ACCESS_KEY env var for this test");
+
+        let credentials = StorageCredentials::access_key(&account, access_key);
+        let service_client = BlobServiceClient::new(&account, credentials);
+        let client = Arc::new(service_client);
+
+        let container_name = "blobs";
+        let container_client = client.container_client(container_name);
+
+        // Create container (idempotent)
+        let _ = container_client.create().await.or_else(|e| {
+            match e.kind() {
+                azure_core::error::ErrorKind::HttpResponse { status, .. } if *status == 409 => {
+                    // Container already exists
+                    Ok(())
+                }
+                _ => Err(e),
+            }
+        })?;
+
+        // Some test data
+        let data: &[u8] = b"Hello from a quick Rust test! This is blob content.";
+        let cid_str = "bafkreigh2akiscaildcqabs2mfomphc4i7w3oecxi4n3go3ch3gaov2mqa"; // any valid CID
+        let cid = Cid::try_from(cid_str).unwrap();
+
+        let blob_name = cid.to_string();
+        let blob_client = container_client.blob_client(&blob_name);
+
+        println!("Uploading blob '{}' ({} bytes)...", blob_name, data.len());
+        blob_client
+            .put_block_blob(data)
+            .content_type("text/plain; charset=utf-8")
+            .await?;
+
+        println!("Upload successful!");
+        println!(
+            "Blob URL: https://{}.blob.core.windows.net/{}/{}",
+            account, container_name, blob_name
+        );
+        Ok(())
     }
 }
