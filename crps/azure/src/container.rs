@@ -12,7 +12,7 @@ use cid_router_core::{
     Context,
     cid::{Codec, blake3_hash_to_cid},
     cid_filter::CidFilter,
-    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
+    crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
@@ -48,12 +48,29 @@ impl Crp for Container {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            blob_writer: None, // TODO
+            blob_writer: if self.cfg.writeable {
+                Some(self)
+            } else {
+                None
+            },
         }
     }
 
     fn cid_filter(&self) -> cid_router_core::cid_filter::CidFilter {
         CidFilter::None
+    }
+}
+
+#[async_trait]
+impl BlobWriter for Container {
+
+    async fn put_blob(
+        &self,
+        auth: Option<bytes::Bytes>,
+        cid: &Cid,
+        data: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        todo!()
     }
 }
 
