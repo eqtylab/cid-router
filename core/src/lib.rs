@@ -8,3 +8,6 @@ pub mod repo;
 pub mod routes;
 
 pub use context::Context;
+
+// Re-export Url from reqwest
+pub use reqwest::Url;

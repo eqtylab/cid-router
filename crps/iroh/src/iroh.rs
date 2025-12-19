@@ -8,7 +8,7 @@ use cid_router_core::{
     cid_filter::{CidFilter, CodeFilter},
     crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     routes::Route,
-    Context,
+    Context, Url,
 };
 use futures::Stream;
 use iroh_blobs::Hash;
@@ -74,14 +74,14 @@ impl BlobWriter for IrohCrp {
         _auth: Option<Bytes>,
         cid: &Cid,
         data: &[u8],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>> {
         let blobs = self.store.blobs().clone();
         let data = Bytes::copy_from_slice(data);
         if cid.hash().code() != 0x1e {
             return Err("Unsupported CID hash code; only blake3 is supported".into());
         }
         blobs.add_bytes(data).with_tag().await.map_err(Box::new)?;
-        Ok(())
+        Ok(Url::parse(&cid.to_string()).unwrap())
     }
 }
 

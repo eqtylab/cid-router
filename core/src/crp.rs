@@ -1,5 +1,6 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc};
 
+use crate::Url;
 use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
@@ -113,5 +114,5 @@ pub trait BlobWriter: Send + Sync {
         auth: Option<bytes::Bytes>,
         cid: &Cid,
         data: &[u8],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>>;
 }
