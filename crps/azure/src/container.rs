@@ -280,11 +280,11 @@ impl Container {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
 
     use azure_storage::StorageCredentials;
     use azure_storage_blobs::prelude::*;
     use cid::Cid;
-    use std::sync::Arc;
 
     #[tokio::test]
     #[ignore]
