@@ -1,13 +1,12 @@
 use std::{fmt::Debug, pin::Pin, sync::Arc};
 
-use crate::Url;
 use anyhow::Result;
 use async_trait::async_trait;
 use cid::Cid;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::{cid_filter::CidFilter, routes::Route, Context};
+use crate::{cid_filter::CidFilter, routes::Route, Context, Url};
 
 /// Set of all supported CID Route Providers (CRPs) throughout the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
