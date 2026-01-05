@@ -6,7 +6,7 @@ use cid::Cid;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 
-use crate::{cid_filter::CidFilter, routes::Route, Context};
+use crate::{cid_filter::CidFilter, routes::Route, Context, Url};
 
 /// Set of all supported CID Route Providers (CRPs) throughout the system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash, Eq)]
@@ -113,5 +113,5 @@ pub trait BlobWriter: Send + Sync {
         auth: Option<bytes::Bytes>,
         cid: &Cid,
         data: &[u8],
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>>;
 }

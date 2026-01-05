@@ -8,6 +8,8 @@ pub struct ContainerConfig {
     pub container: String,
     pub credentials: Option<Credentials>,
     pub filter: ContainerBlobFilter,
+    #[serde(default)]
+    pub writeable: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
