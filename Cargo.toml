@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "crates/api-utils", "crps/azure", "crps/iroh", "cid-router-server"]
+members = ["cid-router-server", "core", "crates/api-utils", "crps/azure", "crps/iroh"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -43,6 +43,7 @@ serde_jcs = "0.1"
 serde_json = "1"
 sha2 = "0.10"
 tabled = "0.15"
+tempfile = "3"
 time = { version = "0.3.21", features = ["serde-well-known"] }
 tokio = { version = "1", features = ["full"] }
 toml = "0.8"
@@ -52,4 +53,3 @@ utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
-tempfile = "3"
