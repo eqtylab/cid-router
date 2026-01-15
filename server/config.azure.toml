@@ -1,0 +1,9 @@
+port = 3080
+auth = "none"
+
+[[providers]]
+type = "azure"
+account = "eueast"
+container = "blobs"
+filter = "all"
+writeable = true

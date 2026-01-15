@@ -190,12 +190,12 @@ pub async fn create_data(
     }
 
     for (provider, res) in &outcome {
-        if res.is_ok() {
+        if let Ok(url) = res {
             let route = cid_router_core::routes::Route::builder(*provider)
                 .cid(cid)
                 .multicodec(cid_router_core::cid::Codec::Raw)
                 .size(data.len() as u64)
-                .url(cid.to_string())
+                .url(url.to_string())
                 .build(&ctx.core)?;
             ctx.core.db().insert_route(&route).await?;
         }

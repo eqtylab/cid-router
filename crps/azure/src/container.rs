@@ -9,10 +9,10 @@ use azure_storage_blobs::{blob::Blob, prelude::*};
 use bytes::Bytes;
 use cid::Cid;
 use cid_router_core::{
-    Context,
+    Context, Url,
     cid::{Codec, blake3_hash_to_cid},
     cid_filter::CidFilter,
-    crp::{Crp, CrpCapabilities, ProviderType, RouteResolver},
+    crp::{BlobWriter, Crp, CrpCapabilities, ProviderType, RouteResolver},
     db::{Direction, OrderBy},
     routes::{Route, RouteStub},
 };
@@ -48,12 +48,36 @@ impl Crp for Container {
     fn capabilities<'a>(&'a self) -> CrpCapabilities<'a> {
         CrpCapabilities {
             route_resolver: Some(self),
-            blob_writer: None, // TODO
+            blob_writer: if self.cfg.writeable { Some(self) } else { None },
         }
     }
 
     fn cid_filter(&self) -> cid_router_core::cid_filter::CidFilter {
         CidFilter::None
+    }
+}
+
+#[async_trait]
+impl BlobWriter for Container {
+    async fn put_blob(
+        &self,
+        _auth: Option<bytes::Bytes>,
+        cid: &Cid,
+        data: &[u8],
+    ) -> Result<Url, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.cfg.writeable {
+            return Err("Container is not writeable".into());
+        }
+        info!("Uploading blob for cid {}...", cid);
+        let name = cid.to_string();
+        let blob_client = self.client.blob_client(&name);
+        blob_client
+            .put_block_blob(data.to_vec())
+            .content_type("application/octet-stream")
+            .await?;
+        let url = self.name_to_route_url(&name);
+        info!("Upload successful! Blob URL: {}", url);
+        Ok(Url::parse(&url).unwrap())
     }
 }
 
@@ -121,7 +145,13 @@ impl Container {
                 ));
                 StorageCredentials::token_credential(credential)
             }
-            None => StorageCredentials::anonymous(),
+            None => {
+                if let Ok(key) = std::env::var("AZURE_STORAGE_ACCESS_KEY") {
+                    StorageCredentials::access_key(account.as_str(), key)
+                } else {
+                    StorageCredentials::anonymous()
+                }
+            }
         };
         let client = BlobServiceClient::new(account, credentials);
         let client = client.container_client(container);
@@ -165,11 +195,15 @@ impl Container {
         Ok(())
     }
 
-    fn blob_to_route_url(&self, blob: &Blob) -> String {
+    fn name_to_route_url(&self, name: &str) -> String {
         format!(
             "https://{}.blob.core.windows.net/{}/{}",
-            self.cfg.account, self.cfg.container, blob.name
+            self.cfg.account, self.cfg.container, name
         )
+    }
+
+    fn blob_to_route_url(&self, blob: &Blob) -> String {
+        self.name_to_route_url(&blob.name)
     }
 
     fn route_url_to_name(url: &str) -> Result<String> {
@@ -241,5 +275,62 @@ impl Container {
 
         let cid = blake3_hash_to_cid(hash.into(), Codec::Raw);
         Ok(cid)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use azure_storage::StorageCredentials;
+    use azure_storage_blobs::prelude::*;
+    use cid::Cid;
+
+    #[tokio::test]
+    #[ignore]
+    async fn create_data() -> anyhow::Result<()> {
+        let account = std::env::var("AZURE_STORAGE_ACCOUNT")
+            .expect("Set AZURE_STORAGE_ACCOUNT env var for this test");
+        let access_key = std::env::var("AZURE_STORAGE_ACCESS_KEY")
+            .expect("Set AZURE_STORAGE_ACCESS_KEY env var for this test");
+
+        let credentials = StorageCredentials::access_key(&account, access_key);
+        let service_client = BlobServiceClient::new(&account, credentials);
+        let client = Arc::new(service_client);
+
+        let container_name = "blobs";
+        let container_client = client.container_client(container_name);
+
+        // Create container (idempotent)
+        let _ = container_client.create().await.or_else(|e| {
+            match e.kind() {
+                azure_core::error::ErrorKind::HttpResponse { status, .. } if *status == 409 => {
+                    // Container already exists
+                    Ok(())
+                }
+                _ => Err(e),
+            }
+        })?;
+
+        // Some test data
+        let data: &[u8] = b"Hello from a quick Rust test! This is blob content.";
+        let cid_str = "bafkreigh2akiscaildcqabs2mfomphc4i7w3oecxi4n3go3ch3gaov2mqa"; // any valid CID
+        let cid = Cid::try_from(cid_str).unwrap();
+
+        let blob_name = cid.to_string();
+        let blob_client = container_client.blob_client(&blob_name);
+
+        println!("Uploading blob '{}' ({} bytes)...", blob_name, data.len());
+        blob_client
+            .put_block_blob(data)
+            .content_type("text/plain; charset=utf-8")
+            .await?;
+
+        println!("Upload successful!");
+        println!(
+            "Blob URL: https://{}.blob.core.windows.net/{}/{}",
+            account, container_name, blob_name
+        );
+        Ok(())
     }
 }
