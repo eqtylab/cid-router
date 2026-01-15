@@ -1,5 +1,5 @@
 [workspace]
-members = ["cid-router-server", "core", "crates/api-utils", "crps/azure", "crps/iroh"]
+members = ["core", "crates/api-utils", "crps/azure", "crps/iroh", "server"]
 resolver = "2"
 
 [workspace.dependencies]
