@@ -22,11 +22,21 @@ pub struct Context {
 
 impl Context {
     pub async fn init_from_repo(repo: Repo, config: Config) -> Result<Self> {
+        let core = cid_router_core::context::Context::from_repo(repo).await?;
+        Self::init_inner(core, config).await
+    }
+
+    /// Initialize context with an in-memory database (for testing).
+    pub async fn init_in_memory(config: Config) -> Result<Self> {
+        let core = cid_router_core::context::Context::mem().await?;
+        Self::init_inner(core, config).await
+    }
+
+    async fn init_inner(core: cid_router_core::context::Context, config: Config) -> Result<Self> {
         let start_time = chrono::Utc::now().timestamp();
         let port = config.port;
 
         let auth = config.auth.clone();
-        let core = cid_router_core::context::Context::from_repo(repo).await?;
 
         let providers = future::join_all(config.providers.into_iter().map(
             |provider_config| async move {

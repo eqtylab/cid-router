@@ -90,7 +90,6 @@ impl Db {
                 creator BLOB,
                 signature BLOB,
                 multicodec TEXT,
-                UNIQUE(provider_id, provider_type, cid),
                 UNIQUE(provider_id, provider_type, url)
             )",
             [],
@@ -104,7 +103,7 @@ impl Db {
         let conn = self.conn.lock().await;
 
         let mut stmt = conn.prepare(
-            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
+            "INSERT OR IGNORE INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
         )?;
 
@@ -296,7 +295,7 @@ impl Db {
     pub async fn insert_stub(&self, stub: &RouteStub) -> Result<()> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
-            "INSERT INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
+            "INSERT OR IGNORE INTO routes (id, created_at, verified_at, provider_id, provider_type, url, cid, size, multicodec, creator, signature)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )?;
 
