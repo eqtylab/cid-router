@@ -23,7 +23,7 @@ Content address everything.
 |[crps](/crps)|Crates for individual CID Route Providers |
 |&emsp;[azure](/crps/azure)| |
 |&emsp;[iroh](/crps/iroh)|Iroh CRP Crate |
-|[server](/server)|CID Router Server |
+|[cid-router-server](/cid-router-server)|CID Router Server |
  
 # Quick Start
 
