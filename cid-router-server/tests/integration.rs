@@ -12,7 +12,7 @@ use cid_router_server::{
     config::{Config, ProviderConfig},
     context::Context,
 };
-use crp_azure::{ContainerConfig, config::ContainerBlobFilter};
+use crp_azure::{config::ContainerBlobFilter, ContainerConfig};
 use log::info;
 use reqwest::Client;
 use tokio::net::TcpListener;
@@ -76,8 +76,12 @@ async fn post_data(client: &Client, base_url: &str, data: &[u8]) -> String {
         panic!("POST failed: {} - {}", status, body);
     }
 
-    let create_response: serde_json::Value = response.json().await.expect("Failed to parse response");
-    create_response["cid"].as_str().expect("No CID in response").to_string()
+    let create_response: serde_json::Value =
+        response.json().await.expect("Failed to parse response");
+    create_response["cid"]
+        .as_str()
+        .expect("No CID in response")
+        .to_string()
 }
 
 /// Helper to get data by CID
@@ -94,7 +98,11 @@ async fn get_data(client: &Client, base_url: &str, cid: &str) -> Vec<u8> {
         panic!("GET /v1/data/{} failed: {} - {}", cid, status, body);
     }
 
-    response.bytes().await.expect("Failed to read response body").to_vec()
+    response
+        .bytes()
+        .await
+        .expect("Failed to read response body")
+        .to_vec()
 }
 
 #[tokio::test]
@@ -118,7 +126,10 @@ async fn test_azure_put_and_get_data() {
 
     let fetched = get_data(&client, &base_url, &cid).await;
     assert_eq!(fetched, unique_data, "Unique data mismatch");
-    info!("Successfully round-tripped unique data ({} bytes)", unique_data.len());
+    info!(
+        "Successfully round-tripped unique data ({} bytes)",
+        unique_data.len()
+    );
 
     // Test 2: Upload the same data twice (should be idempotent)
     let duplicate_data = b"this is duplicate test data";
@@ -161,6 +172,7 @@ async fn test_azure_list_routes() {
         panic!("GET /v1/routes failed: {} - {}", status, body);
     }
 
-    let routes_response: serde_json::Value = response.json().await.expect("Failed to parse response");
+    let routes_response: serde_json::Value =
+        response.json().await.expect("Failed to parse response");
     info!("Routes response: {:?}", routes_response);
 }
